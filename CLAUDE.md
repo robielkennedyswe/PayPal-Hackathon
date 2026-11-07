@@ -56,6 +56,7 @@ AI_MODEL=                                    # set when switching to the real AP
 ANTHROPIC_API_KEY=                           # leave blank until Tuesday
 APP_BASE_URL=http://localhost:8000           # used for PayPal return/cancel URLs
 FRONTEND_URL=http://localhost:5173
+DB_PATH=                                     # optional; default backend/data/shopmcp.db (point at a persistent disk on Render)
 ```
 Remember: no space after `=`.
 

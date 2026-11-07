@@ -7,3 +7,5 @@ httpx==0.28.1
 python-dotenv==1.2.4
 # Schema validation for AI-generated listings
 pydantic==2.14.3
+# ORM over SQLite (tables are pydantic models too)
+sqlmodel==0.0.48

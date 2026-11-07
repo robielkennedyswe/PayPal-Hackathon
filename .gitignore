@@ -17,6 +17,7 @@ venv/
 *.db
 *.sqlite3
 backend/uploads/
+backend/data/
 
 # Node / Vite
 node_modules/
