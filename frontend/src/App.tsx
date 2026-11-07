@@ -1,11 +1,13 @@
 import { TopBar } from './components/TopBar'
 import { Link } from './components/Link'
 import { AddProducts } from './pages/AddProducts'
+import { CheckoutResult } from './pages/CheckoutResult'
 import { Home } from './pages/Home'
+import { Review } from './pages/Review'
 import { matchPath, useLocation } from './router'
 
 export default function App() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
 
   if (pathname === '/') return <Home />
 
@@ -13,6 +15,11 @@ export default function App() {
   // so React keeps its state when the URL gains the new shop id.
   const sell = matchPath('/sell', pathname) ?? matchPath('/sell/:shopId', pathname)
   if (sell) return <AddProducts shopId={sell.shopId} />
+
+  const review = matchPath('/sell/:shopId/review', pathname)
+  if (review) return <Review shopId={review.shopId} />
+
+  if (pathname === '/checkout/result') return <CheckoutResult search={search} />
 
   return (
     <>
