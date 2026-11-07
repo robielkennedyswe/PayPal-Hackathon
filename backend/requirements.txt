@@ -9,3 +9,5 @@ python-dotenv==1.2.4
 pydantic==2.14.3
 # ORM over SQLite (tables are pydantic models too)
 sqlmodel==0.0.48
+# Multipart form parsing for photo uploads (FastAPI UploadFile)
+python-multipart==0.0.33

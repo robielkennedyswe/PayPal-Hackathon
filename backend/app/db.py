@@ -17,9 +17,12 @@ from sqlmodel import Session, SQLModel, create_engine
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
-_DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "shopmcp.db"
-DB_PATH = Path(os.getenv("DB_PATH") or _DEFAULT_DB)
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+# DATA_DIR holds everything that must survive restarts: the SQLite file and
+# uploaded photos. On Render, point it at a persistent disk mount.
+DATA_DIR = Path(os.getenv("DATA_DIR") or Path(__file__).resolve().parents[1] / "data")
+DB_PATH = DATA_DIR / "shopmcp.db"
+UPLOAD_DIR = DATA_DIR / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(
     f"sqlite:///{DB_PATH}",

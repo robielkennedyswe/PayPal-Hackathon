@@ -56,7 +56,7 @@ AI_MODEL=                                    # set when switching to the real AP
 ANTHROPIC_API_KEY=                           # leave blank until Tuesday
 APP_BASE_URL=http://localhost:8000           # used for PayPal return/cancel URLs
 FRONTEND_URL=http://localhost:5173
-DB_PATH=                                     # optional; default backend/data/shopmcp.db (point at a persistent disk on Render)
+DATA_DIR=                                    # optional; default backend/data (SQLite db + uploads; point at a persistent disk on Render)
 ```
 Remember: no space after `=`.
 
@@ -85,6 +85,8 @@ All AI calls go through one switch so the rest of the app never changes when we 
 backend/
   requirements.txt
   app/main.py          FastAPI app, routes, mounts MCP
+  app/schemas.py       API request/response models (validation lives here)
+  app/checkout.py      order capture / completion (shared by routes + MCP tools)
   app/paypal.py        OAuth token caching (~9h expiry), create_order, capture_order, get_order
   app/ai_provider.py   reads AI_PROVIDER / AI_MODEL; mock vs anthropic
   app/catalog_ai.py    photo -> listing JSON (mock fixtures now, Claude vision later)
