@@ -1,0 +1,165 @@
+from sqlmodel import Session
+
+from app import paypal
+from app.db import engine
+from app.models import Order, OrderStatus
+
+SELLER = "seller@business.example.com"
+
+
+def make_shop(client, name="Clay Corner"):
+    r = client.post("/api/shops", json={"name": name, "paypal_payee_email": SELLER})
+    assert r.status_code == 201
+    return r.json()
+
+
+def upload(client, shop_id, filename="blue_mug.jpg", data=b"fake-image"):
+    return client.post(f"/api/shops/{shop_id}/products", files={"file": (filename, data, "image/jpeg")})
+
+
+# ---------- shops & products ----------
+
+def test_health_reports_mock_provider(client):
+    assert client.get("/api/health").json() == {"ok": True, "ai_provider": "mock"}
+
+
+def test_slugs_are_unique(client):
+    assert make_shop(client)["slug"] == "clay-corner"
+    assert make_shop(client)["slug"] == "clay-corner-2"
+
+
+def test_shop_validation(client):
+    r = client.post("/api/shops", json={"name": "  ", "paypal_payee_email": SELLER})
+    assert r.status_code == 422
+    r = client.post("/api/shops", json={"name": "X", "paypal_payee_email": "not-an-email"})
+    assert r.status_code == 422
+
+
+def test_upload_creates_draft_from_mock_ai(client):
+    shop = make_shop(client)
+    r = upload(client, shop["id"])
+    assert r.status_code == 201
+    p = r.json()
+    assert "Mug" in p["title"]
+    assert p["price"] == "34.00" and p["stock"] == 1
+    assert client.get(p["image_url"]).content == b"fake-image"  # served from /uploads
+
+
+def test_upload_rejects_bad_files(client):
+    shop = make_shop(client)
+    assert upload(client, shop["id"], "notes.txt").status_code == 400
+    assert upload(client, shop["id"], data=b"").status_code == 400
+    assert upload(client, shop["id"], data=b"x" * (5 * 1024 * 1024 + 1)).status_code == 413
+    assert upload(client, "shop_missing").status_code == 404
+
+
+def test_upload_filename_cannot_escape_upload_dir(client):
+    shop = make_shop(client)
+    p = upload(client, shop["id"], "../../evil_mug.jpg").json()
+    assert ".." not in p["image_url"]
+    assert p["image_url"].startswith(f"/uploads/{shop['id']}/")
+
+
+def test_update_product(client):
+    shop = make_shop(client)
+    pid = upload(client, shop["id"]).json()["id"]
+    assert client.patch(f"/api/products/{pid}", json={"price": "34"}).status_code == 422
+    assert client.patch(f"/api/products/{pid}", json={"stock": -1}).status_code == 422
+    assert client.patch(f"/api/products/{pid}", json={"title": None}).status_code == 422
+    r = client.patch(f"/api/products/{pid}", json={"price": "36.00", "stock": 4})
+    assert (r.json()["price"], r.json()["stock"]) == ("36.00", 4)
+
+
+def test_delete_product(client):
+    shop = make_shop(client)
+    pid = upload(client, shop["id"]).json()["id"]
+    assert client.delete(f"/api/products/{pid}").status_code == 204
+    assert client.get(f"/api/shops/{shop['id']}").json()["products"] == []
+
+
+def test_publish_requires_products(client):
+    shop = make_shop(client)
+    assert client.post(f"/api/shops/{shop['id']}/publish").status_code == 400
+    upload(client, shop["id"])
+    r = client.post(f"/api/shops/{shop['id']}/publish")
+    assert r.json()["published"] is True and len(r.json()["products"]) == 1
+
+
+# ---------- PayPal return / capture ----------
+
+def captured(order_id="PAYPAL123"):
+    return {
+        "id": order_id,
+        "status": "COMPLETED",
+        "purchase_units": [{"payments": {"captures": [{"id": "CAP1", "status": "COMPLETED"}]}}],
+    }
+
+
+def make_order(client, stock=3, qty=1):
+    shop = make_shop(client)
+    pid = upload(client, shop["id"]).json()["id"]
+    client.patch(f"/api/products/{pid}", json={"stock": stock})
+    with Session(engine) as s:
+        o = Order(paypal_order_id="PAYPAL123", product_id=pid, qty=qty, amount="34.00")
+        s.add(o)
+        s.commit()
+        return o.id, pid, shop["id"]
+
+
+def stock_of(client, shop_id):
+    return client.get(f"/api/shops/{shop_id}").json()["products"][0]["stock"]
+
+
+def test_return_captures_and_decrements_stock(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(paypal, "capture_order", lambda oid: calls.append(oid) or captured(oid))
+    oid, _, shop_id = make_order(client, stock=3, qty=2)
+
+    r = client.get("/paypal/return?token=PAYPAL123", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].endswith(f"/checkout/result?status=completed&order={oid}")
+    order = client.get(f"/api/orders/{oid}").json()
+    assert (order["status"], order["paypal_capture_id"]) == ("COMPLETED", "CAP1")
+    assert stock_of(client, shop_id) == 1
+
+    # Refreshing the return page must not capture or decrement again.
+    client.get("/paypal/return?token=PAYPAL123", follow_redirects=False)
+    assert calls == ["PAYPAL123"]
+    assert stock_of(client, shop_id) == 1
+
+
+def test_return_skips_capture_when_out_of_stock(client, monkeypatch):
+    monkeypatch.setattr(paypal, "capture_order", lambda oid: (_ for _ in ()).throw(AssertionError("captured!")))
+    oid, _, _ = make_order(client, stock=1, qty=2)
+    r = client.get("/paypal/return?token=PAYPAL123", follow_redirects=False)
+    assert "status=out_of_stock" in r.headers["location"]
+    assert client.get(f"/api/orders/{oid}").json()["status"] == OrderStatus.CREATED
+
+
+def test_return_handles_already_captured(client, monkeypatch):
+    def already(_oid):
+        raise paypal.PayPalError(422, {"name": "UNPROCESSABLE_ENTITY",
+                                       "details": [{"issue": "ORDER_ALREADY_CAPTURED"}]})
+    monkeypatch.setattr(paypal, "capture_order", already)
+    monkeypatch.setattr(paypal, "get_order", captured)
+    oid, _, shop_id = make_order(client, stock=3)
+    r = client.get("/paypal/return?token=PAYPAL123", follow_redirects=False)
+    assert "status=completed" in r.headers["location"]
+    assert stock_of(client, shop_id) == 2
+
+
+def test_return_reports_other_paypal_errors(client, monkeypatch):
+    def boom(_oid):
+        raise paypal.PayPalError(500, {"name": "INTERNAL_SERVER_ERROR"})
+    monkeypatch.setattr(paypal, "capture_order", boom)
+    oid, _, shop_id = make_order(client, stock=3)
+    r = client.get("/paypal/return?token=PAYPAL123", follow_redirects=False)
+    assert "status=failed" in r.headers["location"]
+    assert stock_of(client, shop_id) == 3
+
+
+def test_return_and_cancel_unknown_token(client):
+    r = client.get("/paypal/return?token=NOPE", follow_redirects=False)
+    assert r.headers["location"].endswith("/checkout/result?status=not_found")
+    r = client.get("/paypal/cancel?token=NOPE", follow_redirects=False)
+    assert "status=cancelled" in r.headers["location"]
