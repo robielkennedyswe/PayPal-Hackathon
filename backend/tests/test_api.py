@@ -95,6 +95,19 @@ def test_publish_requires_products(client):
     assert r.json()["published"] is True and len(r.json()["products"]) == 1
 
 
+def test_storefront_only_shows_published_shops(client):
+    shop = make_shop(client)
+    upload(client, shop["id"])
+    assert client.get(f"/api/storefront/{shop['slug']}").status_code == 404
+    assert client.get("/api/storefront/no-such-shop").status_code == 404
+    client.post(f"/api/shops/{shop['id']}/publish")
+    r = client.get(f"/api/storefront/{shop['slug']}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "Clay Corner" and len(body["products"]) == 1
+    assert "paypal_payee_email" not in body  # seller email stays private
+
+
 # ---------- PayPal return / capture ----------
 
 def captured(order_id="PAYPAL123"):

@@ -118,6 +118,18 @@ class ShopOut(BaseModel):
         )
 
 
+class StorefrontOut(BaseModel):
+    """Public view of a published shop: no seller email, no internal ids."""
+
+    name: str
+    slug: str
+    products: list[ProductOut]
+
+    @classmethod
+    def of(cls, s: Shop, products: list[Product]) -> "StorefrontOut":
+        return cls(name=s.name, slug=s.slug, products=[ProductOut.of(p) for p in products])
+
+
 class OrderOut(BaseModel):
     id: str
     paypal_order_id: str

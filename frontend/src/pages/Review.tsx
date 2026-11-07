@@ -86,7 +86,6 @@ export function Review({ shopId }: { shopId: string }) {
     [forms],
   )
   const anyInvalid = Object.values(errors).some((e) => Object.keys(e).length > 0)
-  const anySaving = Object.values(saveState).includes('saving')
 
   const setField = (id: string, field: Field, value: string) =>
     setForms((fs) => ({ ...fs, [id]: { ...fs[id], [field]: value } }))
@@ -182,13 +181,23 @@ export function Review({ shopId }: { shopId: string }) {
               Check each AI draft for <strong>{shop.name}</strong>. Changes save when you leave a field.
             </p>
           </div>
-          <button
-            className="btn btn-primary"
-            onClick={publish}
-            disabled={shop.published || publishing || anySaving || anyInvalid || products.length === 0}
-          >
-            {shop.published ? 'Published ✓' : publishing ? 'Publishing…' : 'Publish to AI agents'}
-          </button>
+          <div className="head-actions">
+            {shop.published && (
+              <Link href={`/s/${shop.slug}`} className="btn">
+                View storefront
+              </Link>
+            )}
+            <button
+              className="btn btn-primary"
+              onClick={publish}
+              // Not disabled while a field is saving: clicking Publish blurs the
+              // field, which starts a save, and a button that disables itself
+              // mid-click swallows the click. publish() saves pending edits itself.
+              disabled={shop.published || publishing || anyInvalid || products.length === 0}
+            >
+              {shop.published ? 'Published ✓' : publishing ? 'Publishing…' : 'Publish to AI agents'}
+            </button>
+          </div>
         </div>
 
         {shop.published && (
@@ -197,6 +206,9 @@ export function Review({ shopId }: { shopId: string }) {
               <strong>{shop.name} is live to AI agents.</strong>
               <div>Edits you make now go live as soon as they save.</div>
             </div>
+            <Link href={`/s/${shop.slug}`} className="btn btn-primary btn-sm">
+              View your storefront →
+            </Link>
           </div>
         )}
         {publishError && <div className="banner banner-error">{publishError}</div>}

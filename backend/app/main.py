@@ -23,7 +23,7 @@ from app import ai_provider, catalog_ai
 from app.checkout import Outcome, complete_order
 from app.db import UPLOAD_DIR, get_session, init_db
 from app.models import Order, Product, Shop
-from app.schemas import OrderOut, ProductOut, ProductUpdate, ShopCreate, ShopOut
+from app.schemas import OrderOut, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
 
 FRONTEND_URL = (os.getenv("FRONTEND_URL") or "http://localhost:5173").rstrip("/")
 # Claude's API rejects images over 5 MB, so we enforce the same cap at upload
@@ -201,6 +201,15 @@ def publish_shop(shop_id: str, session: Session = Depends(get_session)) -> ShopO
     # Re-query after commit: commit expires loaded objects, and pydantic's
     # model_dump reads expired SQLModel instances as empty, not reloaded.
     return ShopOut.of(shop, _products(session, shop_id))
+
+
+@app.get("/api/storefront/{slug}")
+def storefront(slug: str, session: Session = Depends(get_session)) -> StorefrontOut:
+    """Public shop page data. Unpublished shops look exactly like missing ones."""
+    shop = session.exec(select(Shop).where(Shop.slug == slug)).first()
+    if shop is None or not shop.published:
+        raise HTTPException(404, "Shop not found")
+    return StorefrontOut.of(shop, _products(session, shop.id))
 
 
 @app.get("/api/orders/{order_id}")

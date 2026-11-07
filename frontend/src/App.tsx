@@ -4,6 +4,7 @@ import { AddProducts } from './pages/AddProducts'
 import { CheckoutResult } from './pages/CheckoutResult'
 import { Home } from './pages/Home'
 import { Review } from './pages/Review'
+import { Storefront } from './pages/Storefront'
 import { matchPath, useLocation } from './router'
 
 export default function App() {
@@ -18,6 +19,9 @@ export default function App() {
 
   const review = matchPath('/sell/:shopId/review', pathname)
   if (review) return <Review shopId={review.shopId} />
+
+  const store = matchPath('/s/:slug', pathname)
+  if (store) return <Storefront slug={store.slug} />
 
   if (pathname === '/checkout/result') return <CheckoutResult search={search} />
 

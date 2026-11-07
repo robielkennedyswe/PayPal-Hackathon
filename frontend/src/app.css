@@ -760,3 +760,135 @@ textarea.input {
 .result-details dd {
   margin: 0;
 }
+
+/* ---------- storefront ---------- */
+
+.store-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6) 0;
+}
+
+.store-head h1 {
+  font-size: 36px;
+  letter-spacing: -0.02em;
+}
+
+.store-layout {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .store-layout {
+    grid-template-columns: 1fr;
+  }
+  .how-to-buy {
+    order: -1;
+  }
+}
+
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+
+.store-card {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.store-img {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--bg);
+}
+
+.store-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sold-out .store-img img {
+  filter: grayscale(0.8);
+  opacity: 0.6;
+}
+
+.sold-badge {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.store-body {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.store-body h3 {
+  font-size: 16px;
+}
+
+.store-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.store-meta .draft-price {
+  font-size: 18px;
+}
+
+.stock-note {
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.stock-note.low {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.store-desc {
+  font-size: 14px;
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.how-to-buy {
+  position: sticky;
+  top: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  font-size: 14px;
+}
+
+.how-to-buy h2 {
+  margin-bottom: 0;
+}
+
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

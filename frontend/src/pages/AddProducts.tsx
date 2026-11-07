@@ -244,6 +244,12 @@ export function AddProducts({ shopId }: { shopId?: string }) {
             {shop && (
               <p className="locked-note">
                 Shop created · <span className="mono">{shop.slug}</span>
+                {shop.published && (
+                  <>
+                    {' · '}
+                    <Link href={`/s/${shop.slug}`}>View storefront</Link>
+                  </>
+                )}
               </p>
             )}
           </section>

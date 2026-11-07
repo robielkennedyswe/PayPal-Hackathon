@@ -23,6 +23,13 @@ export type Shop = {
   products: Product[]
 }
 
+/** Public storefront: published shops only, no seller email. */
+export type Storefront = {
+  name: string
+  slug: string
+  products: Product[]
+}
+
 export type ProductUpdate = Partial<Pick<Product, 'title' | 'description' | 'price' | 'stock' | 'tags'>>
 
 export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/

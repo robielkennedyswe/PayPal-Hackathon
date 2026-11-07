@@ -1,7 +1,7 @@
 // Typed wrappers around the FastAPI routes. In dev, relative URLs go
 // through the Vite proxy to :8000. (Deploy: prefix with the backend URL.)
 
-import type { Product, ProductUpdate, Shop } from './types'
+import type { Product, ProductUpdate, Shop, Storefront } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -51,6 +51,8 @@ export const api = {
 
   deleteProduct: (productId: string) =>
     request<void>(`/api/products/${productId}`, { method: 'DELETE' }),
+
+  getStorefront: (slug: string) => request<Storefront>(`/api/storefront/${encodeURIComponent(slug)}`),
 
   publishShop: (shopId: string) => request<Shop>(`/api/shops/${shopId}/publish`, { method: 'POST' }),
 }
