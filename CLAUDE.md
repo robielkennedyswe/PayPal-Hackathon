@@ -4,26 +4,57 @@ Project submission for the "Build What's Next with PayPal and AI" hackathon (Dev
 
 **Deadline: Thu Nov 12, 2026, 3:00 PM EST. Target: submit by noon.**
 
-## Status (as of 2026-11-07)
+## Status (as of 2026-11-08, end of Sunday's work)
 
-Idea locked (ShopMCP) and screens designed. No application code yet.
+Saturday + Sunday schedule complete and pushed. Seller flow works end to end in mock AI mode. **Next: Monday** (payee check, `create_checkout`, MCP server + 4 tools, mock agent).
 
-- Repo cloned locally and pushed to `robielkennedyswe/PayPal-Hackathon`.
-- `.env` created with hackathon-issued sandbox credentials (`Client_ID`, `Secret_Key`), added to `.gitignore` so it's never committed.
-- Verified the OAuth2 `client_credentials` flow against PayPal sandbox:
-  ```
-  set -a; source .env; set +a
-  curl -X POST "https://api-m.sandbox.paypal.com/v1/oauth2/token" \
-    -u "$Client_ID:$Secret_Key" \
-    -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "grant_type=client_credentials"
-  ```
-  Returns a JSON body with `access_token` (Bearer, `expires_in` ~32400s / 9h), `token_type`, `scope`, `app_id`, `nonce`.
-- No Anthropic API key yet. We build with a **mock AI provider** first and switch to the real Claude API by **Tuesday** (see "AI provider" below).
+Done:
+- **Repo:** MIT `LICENSE`, `.env.example`, `.gitignore`. `.env` was never committed.
+- **PayPal** (`backend/app/paypal.py`): cached OAuth token, `create_order` / `get_order` / `capture_order`, refuses non-sandbox URLs. `scripts/paypal_smoke_test.py` completed a real $34.00 sandbox capture.
+- **AI** (mock only): `ai_provider.py` switch; `catalog_ai.generate_listing()` with the strict `Listing` schema; fixtures in `fixtures/listings.json`. `_claude_listing()` is a TODO for Tuesday.
+- **DB** (`db.py`, `models.py`): SQLite, Shop/Product/Order, prefixed string ids (`shop_…`, `prod_…`, `ord_…`), foreign keys + WAL on. Everything persistent lives in `DATA_DIR`.
+- **API** (`main.py`, `schemas.py`, `checkout.py`): shops, photo upload → AI draft, product PATCH/DELETE, publish, `GET /api/storefront/{slug}` (published only, no seller email), `GET /api/orders/{id}`, `/paypal/return` + `/paypal/cancel`.
+  - `checkout.complete_order()` skips capture when out of stock, is idempotent (atomic conditional update), and handles `ORDER_ALREADY_CAPTURED`.
+  - Prices normalize (`"100"` → `"100.00"`) and must be > 0.
+  - 16 pytest tests in `backend/tests/` (PayPal is faked; tests never hit the network).
+- **Frontend** (`frontend/`, React + Vite + TS):
+  - Tiny History-API router (`router.ts` + `components/Link.tsx`) instead of react-router.
+  - Routes: `/` home, `/sell` and `/sell/:shopId` (screen 1), `/sell/:shopId/review` (screen 2), `/s/:slug` (public storefront), `/checkout/result`.
+  - `agentView.ts` defines the JSON shown in "What AI agents will see". **Monday's MCP `get_product` must return this same shape.**
 
-### Gotcha hit
+Not done / unverified:
+- `/paypal/return` has only been tested with faked PayPal responses; do a live approve → capture once `create_checkout` exists.
+- Screens 3 (dashboard) and 4 (shopper agent), MCP server, `agent.py`, Claude API, Render deploy.
+- Verify in docs: `payee.email_address` (Orders v2), `ORDER_ALREADY_CAPTURED` issue name, Claude's 5 MB image limit, Render persistent disk for `DATA_DIR`.
+- Deployed frontend needs the backend URL (`VITE_API_BASE_URL` or serve the built frontend from FastAPI).
 
-`.env` values must be `KEY=value` with **no space** after `=`. A space (`KEY= value`) breaks `source` in bash/zsh — it assigns an empty value to `KEY` and then tries to run the rest as a command.
+### Running locally
+```
+cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000   # API docs: :8000/docs
+cd frontend && npm run dev                                          # http://localhost:5173 (proxies /api /mcp /paypal /uploads)
+cd backend && .venv/bin/python -m pytest                            # tests (requirements-dev.txt)
+backend/.venv/bin/python scripts/paypal_smoke_test.py               # live sandbox order -> approve -> capture
+backend/.venv/bin/python scripts/vision_smoke_test.py               # mock listing JSON
+```
+Delete `backend/data/` for a clean database (it has test shops from development).
+
+PayPal OAuth by hand (verified):
+```
+set -a; source .env; set +a
+curl -X POST "https://api-m.sandbox.paypal.com/v1/oauth2/token" \
+  -u "$Client_ID:$Secret_Key" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials"
+```
+
+### Gotchas hit
+- `.env` values must be `KEY=value` with **no space** after `=`. A space breaks `source` in bash/zsh.
+- **Sandbox checkout page:** open approve links in a **private/incognito window** and log in with the sandbox **Personal** account (credentials under developer.paypal.com → Sandbox accounts → View/edit). A logged-in developer-dashboard session makes the checkout page error out. Put this in the README.
+- **Mock AI picks a fixture from the filename** (`blue_mug.jpg` → mug; also `vase`, `bowl`), not the image. Uploads keep the original name words for this reason.
+- **SQLAlchemy expires objects on commit**, and pydantic `model_dump` reads expired SQLModel objects as empty instead of reloading them. Re-query or `refresh()` after `commit()` before building a response.
+- **Don't disable a button while a blur-triggered save runs.** Clicking Publish right after editing blurred the field, started a save, disabled the button mid-click, and silently dropped the click. `publish()` saves pending edits itself instead.
+- **Commits:** author is `Robiel Kennedy <287809215+robielkennedyswe@users.noreply.github.com>` (repo-local git config). No `Co-Authored-By` trailers, so `robielkennedyswe` stays the only contributor; Claude Code is credited in the README/Devpost instead.
+- Port 5173 can be taken by another local project. Vite then moves to 5174, which breaks `FRONTEND_URL` redirects.
 
 ## What we're building: ShopMCP
 
@@ -129,8 +160,8 @@ Look: warm off-white #FBFAF7, ink #17181C, seller teal #0B6B58, agent indigo #43
 ## Schedule
 | Day | Goal |
 |---|---|
-| Sat | LICENSE (MIT), `.env.example`, check `.gitignore`; `paypal_smoke_test.py` working (OAuth already verified); AI provider switch + mock catalog; `vision_smoke_test.py` working in mock mode |
-| Sun | Seller onboarding UI + DB + publish |
+| Sat ✅ | LICENSE (MIT), `.env.example`, check `.gitignore`; `paypal_smoke_test.py` working (OAuth already verified); AI provider switch + mock catalog; `vision_smoke_test.py` working in mock mode |
+| Sun ✅ | Seller onboarding UI + DB + publish (+ public storefront) |
 | Mon | MCP server + 4 tools wired to PayPal; test with Claude Code / Claude Desktop as the shopper agent |
 | Tue | **Switch to real Claude API** (catalog + built-in agent); shopper agent page, live seller dashboard, deploy to Render |
 | Wed | Polish, README (setup + sandbox buyer test login instructions), demo video, Devpost write-up; stretch goal |
