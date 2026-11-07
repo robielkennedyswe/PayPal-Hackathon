@@ -1,36 +1,31 @@
-// Placeholder shell: shows the design tokens working and lists the four
-// screens. Each card is replaced by a real page (and a router) as it's built.
-
-type Screen = {
-  title: string
-  summary: string
-  side: 'seller' | 'agent'
-}
-
-const SCREENS: Screen[] = [
-  { title: 'Add products', summary: 'Shop name, PayPal email, photo drop zone; AI drafts listings.', side: 'seller' },
-  { title: 'Review & publish', summary: 'Edit title, price, stock. See what AI agents will see.', side: 'seller' },
-  { title: 'Seller dashboard', summary: 'MCP endpoint, live activity feed, inventory.', side: 'seller' },
-  { title: 'Shopper agent', summary: 'Chat with an AI agent that searches and buys via PayPal.', side: 'agent' },
-]
+import { TopBar } from './components/TopBar'
+import { Link } from './components/Link'
+import { AddProducts } from './pages/AddProducts'
+import { Home } from './pages/Home'
+import { matchPath, useLocation } from './router'
 
 export default function App() {
+  const { pathname } = useLocation()
+
+  if (pathname === '/') return <Home />
+
+  // /sell and /sell/:shopId render the same component from the same spot,
+  // so React keeps its state when the URL gains the new shop id.
+  const sell = matchPath('/sell', pathname) ?? matchPath('/sell/:shopId', pathname)
+  if (sell) return <AddProducts shopId={sell.shopId} />
+
   return (
-    <main className="shell">
-      <header className="brand">
-        <img src="/favicon.svg" alt="" />
-        <h1>ShopMCP</h1>
-      </header>
-      <p className="tagline">Make any tiny shop buyable by AI agents.</p>
-      <section className="screens">
-        {SCREENS.map((s) => (
-          <article key={s.title} className="screen-card">
-            <span className={`chip ${s.side}`}>{s.side}</span>
-            <h2>{s.title}</h2>
-            <p>{s.summary}</p>
-          </article>
-        ))}
-      </section>
-    </main>
+    <>
+      <TopBar />
+      <main className="page">
+        <h1>Page not found</h1>
+        <p className="muted" style={{ margin: '8px 0 16px' }}>
+          Nothing lives at <span className="mono">{pathname}</span>.
+        </p>
+        <Link href="/" className="btn">
+          Go home
+        </Link>
+      </main>
+    </>
   )
 }
