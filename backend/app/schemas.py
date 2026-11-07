@@ -7,6 +7,7 @@ leaves the server (e.g. image_url instead of a filesystem path).
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field, field_validator
@@ -15,6 +16,22 @@ from app.models import Order, OrderStatus, Product, Shop
 
 PRICE_PATTERN = r"^\d{1,6}\.\d{2}$"  # "34.00": same format catalog_ai and PayPal use
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"  # loose check; PayPal is the real judge
+
+
+def normalize_price(value: object) -> object:
+    """Accept friendly inputs ("20", "20.5", "$1,200") and return "20.00" form.
+
+    Anything unrecognizable is returned unchanged so PRICE_PATTERN rejects it
+    with a normal validation error.
+    """
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return value
+    s = str(value).strip().removeprefix("$").replace(",", "").strip()
+    m = re.fullmatch(r"(\d{1,6})(?:\.(\d{0,2}))?", s)
+    if not m:
+        return value
+    # String math, not float: float("0.1") etc. would introduce rounding.
+    return f"{int(m[1])}.{(m[2] or '').ljust(2, '0')}"
 
 
 def _utc(dt: datetime) -> datetime:
@@ -45,6 +62,18 @@ class ProductUpdate(BaseModel):
     stock: int | None = Field(default=None, ge=0, le=100_000)
     tags: list[str] | None = Field(default=None, max_length=15)
     attributes: dict[str, str | int | float | bool] | None = None
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _normalize_price(cls, v: object) -> object:
+        return normalize_price(v) if v is not None else v
+
+    @field_validator("price")
+    @classmethod
+    def _positive_price(cls, v: str | None) -> str | None:
+        if v is not None and float(v) <= 0:
+            raise ValueError("price must be greater than 0")  # PayPal rejects 0.00 orders
+        return v
 
 
 # ---- responses ----

@@ -25,5 +25,16 @@ export type Shop = {
 
 export type ProductUpdate = Partial<Pick<Product, 'title' | 'description' | 'price' | 'stock' | 'tags'>>
 
-export const PRICE_RE = /^\d{1,6}\.\d{2}$/
 export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
+/**
+ * "20" -> "20.00", "20.5" -> "20.50", "$1,200" -> "1200.00".
+ * Returns null if the input isn't a price. Mirrors normalize_price() in
+ * backend/app/schemas.py. String math only, so no float rounding.
+ */
+export function normalizePrice(input: string): string | null {
+  const s = input.trim().replace(/^\$/, '').replace(/,/g, '').trim()
+  const m = /^(\d{1,6})(?:\.(\d{0,2}))?$/.exec(s)
+  if (!m) return null
+  return `${parseInt(m[1], 10)}.${(m[2] ?? '').padEnd(2, '0')}`
+}

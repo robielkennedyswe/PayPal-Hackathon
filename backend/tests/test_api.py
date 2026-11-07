@@ -63,11 +63,21 @@ def test_upload_filename_cannot_escape_upload_dir(client):
 def test_update_product(client):
     shop = make_shop(client)
     pid = upload(client, shop["id"]).json()["id"]
-    assert client.patch(f"/api/products/{pid}", json={"price": "34"}).status_code == 422
+    assert client.patch(f"/api/products/{pid}", json={"price": "34.567"}).status_code == 422
     assert client.patch(f"/api/products/{pid}", json={"stock": -1}).status_code == 422
     assert client.patch(f"/api/products/{pid}", json={"title": None}).status_code == 422
     r = client.patch(f"/api/products/{pid}", json={"price": "36.00", "stock": 4})
     assert (r.json()["price"], r.json()["stock"]) == ("36.00", 4)
+
+
+def test_price_input_is_normalized(client):
+    shop = make_shop(client)
+    pid = upload(client, shop["id"]).json()["id"]
+    for given, stored in [("100", "100.00"), ("20.5", "20.50"), ("$1,200", "1200.00"), (" 7.25 ", "7.25"), (45, "45.00")]:
+        r = client.patch(f"/api/products/{pid}", json={"price": given})
+        assert r.status_code == 200 and r.json()["price"] == stored, given
+    for bad in ["0", "0.00", "abc", "12.345", "-5", "1234567", True]:
+        assert client.patch(f"/api/products/{pid}", json={"price": bad}).status_code == 422, bad
 
 
 def test_delete_product(client):

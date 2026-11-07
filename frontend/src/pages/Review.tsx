@@ -6,7 +6,7 @@ import { agentView } from '../agentView'
 import { api } from '../api'
 import { Link } from '../components/Link'
 import { TopBar } from '../components/TopBar'
-import { PRICE_RE, type Product, type ProductUpdate, type Shop } from '../types'
+import { normalizePrice, type Product, type ProductUpdate, type Shop } from '../types'
 
 /** Form values are strings while editing; parsed and validated on save. */
 type Form = { title: string; description: string; price: string; stock: string; tags: string }
@@ -32,7 +32,9 @@ function validate(f: Form): Partial<Record<Field, string>> {
   const e: Partial<Record<Field, string>> = {}
   if (f.title.trim().length < 3 || f.title.length > 120) e.title = '3–120 characters'
   if (f.description.trim().length < 10 || f.description.length > 2000) e.description = '10–2000 characters'
-  if (!PRICE_RE.test(f.price)) e.price = 'Use a price like 34.00'
+  const price = normalizePrice(f.price)
+  if (price === null) e.price = 'Use a price like 20 or 34.50'
+  else if (Number(price) <= 0) e.price = 'Price must be more than $0'
   if (!/^\d+$/.test(f.stock) || Number(f.stock) > 100_000) e.stock = 'Whole number, 0 or more'
   if (parseTags(f.tags).length > 15) e.tags = 'At most 15 tags'
   return e
@@ -43,7 +45,8 @@ function changes(form: Form, p: Product): ProductUpdate {
   const c: ProductUpdate = {}
   if (form.title.trim() !== p.title) c.title = form.title.trim()
   if (form.description.trim() !== p.description) c.description = form.description.trim()
-  if (form.price !== p.price) c.price = form.price
+  const price = normalizePrice(form.price) ?? form.price
+  if (price !== p.price) c.price = price
   if (Number(form.stock) !== p.stock) c.stock = Number(form.stock)
   const tags = parseTags(form.tags)
   if (tags.join('\n') !== p.tags.join('\n')) c.tags = tags
@@ -224,7 +227,12 @@ export function Review({ shopId }: { shopId: string }) {
                   selected={p.id === selected}
                   onSelect={() => setSelected(p.id)}
                   onChange={(field, value) => setField(p.id, field, value)}
-                  onBlur={() => save(p.id)}
+                  onBlur={(field) => {
+                    // Show "20" as "20.00" once the seller leaves the field.
+                    const price = normalizePrice(forms[p.id].price)
+                    if (field === 'price' && price) setField(p.id, 'price', price)
+                    save(p.id)
+                  }}
                   onRemove={() => remove(p.id)}
                 />
               ))}
@@ -247,7 +255,7 @@ export function Review({ shopId }: { shopId: string }) {
                       {
                         title: selForm.title.trim(),
                         description: selForm.description.trim(),
-                        price: selForm.price,
+                        price: normalizePrice(selForm.price) ?? selForm.price,
                         stock: Number(selForm.stock) || 0,
                         tags: parseTags(selForm.tags),
                         attributes: sel.attributes,
@@ -276,7 +284,7 @@ type EditorProps = {
   selected: boolean
   onSelect: () => void
   onChange: (field: Field, value: string) => void
-  onBlur: () => void
+  onBlur: (field: Field) => void
   onRemove: () => void
 }
 
@@ -293,7 +301,7 @@ function ProductEditor({ product: p, form, errors, saveState, saveError, selecte
           value={form[f]}
           inputMode={extra?.inputMode}
           onChange={(e) => onChange(f, e.target.value)}
-          onBlur={onBlur}
+          onBlur={() => onBlur(f)}
           aria-invalid={!!errors[f]}
           aria-describedby={errors[f] ? `${id(f)}-err` : undefined}
         />
@@ -327,13 +335,13 @@ function ProductEditor({ product: p, form, errors, saveState, saveError, selecte
             rows={3}
             value={form.description}
             onChange={(e) => onChange('description', e.target.value)}
-            onBlur={onBlur}
+            onBlur={() => onBlur('description')}
             aria-invalid={!!errors.description}
           />
           {errors.description && <span className="error-text">{errors.description}</span>}
         </div>
         <div className="editor-row">
-          {input('price', 'Price (USD)', { prefix: '$', inputMode: 'decimal', hint: 'AI suggested' })}
+          {input('price', 'Price (USD)', { prefix: '$', inputMode: 'decimal', hint: 'AI suggested · whole dollars are fine' })}
           {input('stock', 'Stock', { inputMode: 'numeric' })}
         </div>
         {input('tags', 'Tags', { hint: 'Comma-separated; agents search these' })}
