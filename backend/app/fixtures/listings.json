@@ -1,0 +1,52 @@
+{
+  "mug": {
+    "title": "Hand-Thrown Speckled Stoneware Mug, Ocean Blue Glaze",
+    "description": "A wheel-thrown stoneware mug with a deep ocean-blue glaze that breaks to cream over the speckled clay body. Comfortable C-handle, slightly flared rim, and an unglazed foot ring. Holds about 12 oz. Each piece is one of a kind, so glaze pooling varies.",
+    "attributes": {
+      "material": "stoneware",
+      "color": "ocean blue",
+      "capacity_oz": 12,
+      "dishwasher_safe": true,
+      "microwave_safe": true,
+      "handmade": true
+    },
+    "tags": ["mug", "ceramic", "stoneware", "handmade", "coffee", "blue", "gift"],
+    "suggested_price": "34.00"
+  },
+  "vase": {
+    "title": "Small Bud Vase, Matte White with Raw Clay Neck",
+    "description": "A petite bottle-shaped bud vase in matte white glaze, with the raw terracotta clay left exposed at the neck. Sized for a single stem or a few dried grasses. Glazed inside so it holds water. About 6 inches tall.",
+    "attributes": {
+      "material": "terracotta",
+      "color": "matte white",
+      "height_in": 6,
+      "watertight": true,
+      "handmade": true
+    },
+    "tags": ["vase", "bud vase", "ceramic", "minimalist", "home decor", "white"],
+    "suggested_price": "28.00"
+  },
+  "bowl": {
+    "title": "Nesting Serving Bowl, Sage Green Celadon",
+    "description": "A wide, shallow serving bowl in a translucent sage-green celadon glaze over porcelain. Great for salads, fruit, or as a centerpiece. Food safe and lead free. Roughly 9 inches across and 3 inches deep.",
+    "attributes": {
+      "material": "porcelain",
+      "color": "sage green",
+      "diameter_in": 9,
+      "food_safe": true,
+      "dishwasher_safe": false,
+      "handmade": true
+    },
+    "tags": ["bowl", "serving bowl", "porcelain", "celadon", "green", "kitchen"],
+    "suggested_price": "46.00"
+  },
+  "generic": {
+    "title": "Handmade Artisan Piece",
+    "description": "A one-of-a-kind handmade item from an independent maker. Review and edit this draft: add the material, size, color, and anything a buyer should know before purchasing.",
+    "attributes": {
+      "handmade": true
+    },
+    "tags": ["handmade", "artisan", "gift"],
+    "suggested_price": "25.00"
+  }
+}
