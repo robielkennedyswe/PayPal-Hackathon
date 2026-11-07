@@ -1,0 +1,9 @@
+# Web framework + server (FastAPI app; MCP server mounts here on Monday)
+fastapi==0.162.2
+uvicorn[standard]==0.54.0
+# HTTP client for PayPal REST calls
+httpx==0.28.1
+# Loads .env into os.environ
+python-dotenv==1.2.4
+# Schema validation for AI-generated listings
+pydantic==2.14.3
