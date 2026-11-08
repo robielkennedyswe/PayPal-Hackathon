@@ -2,6 +2,7 @@ import { TopBar } from './components/TopBar'
 import { Link } from './components/Link'
 import { AddProducts } from './pages/AddProducts'
 import { CheckoutResult } from './pages/CheckoutResult'
+import { Dashboard } from './pages/Dashboard'
 import { Home } from './pages/Home'
 import { Review } from './pages/Review'
 import { ShopperAgent } from './pages/ShopperAgent'
@@ -20,6 +21,9 @@ export default function App() {
 
   const review = matchPath('/sell/:shopId/review', pathname)
   if (review) return <Review shopId={review.shopId} />
+
+  const dash = matchPath('/sell/:shopId/dashboard', pathname)
+  if (dash) return <Dashboard shopId={dash.shopId} />
 
   const store = matchPath('/s/:slug', pathname)
   if (store) return <Storefront slug={store.slug} />

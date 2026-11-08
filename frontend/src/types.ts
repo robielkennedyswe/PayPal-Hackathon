@@ -101,3 +101,26 @@ export type AgentTurn = { text: string; tool_calls: ToolCall[]; cards: AgentCard
 export type AgentHistory = unknown[]
 
 export type AgentReply = { history: AgentHistory; turn: AgentTurn }
+
+// ---- seller dashboard (GET /api/shops/:id/dashboard) ----
+
+export type ActivityKind = 'search' | 'view' | 'checkout' | 'approved' | 'sold' | 'cancelled' | 'missed'
+
+export type ActivityEvent = {
+  id: number
+  kind: ActivityKind
+  source: 'mcp' | 'agent' | 'web'
+  product_id: string | null
+  product_title: string | null
+  order_id: string | null
+  detail: { query?: string; max_price?: number | null; matches?: number; qty?: number; amount?: string; title?: string }
+  created_at: string
+}
+
+export type Dashboard = {
+  shop: Shop
+  mcp_url: string
+  stats: { searches: number; views: number; checkouts: number; sales: number; units_sold: number; revenue: string }
+  units_sold: Record<string, number>
+  events: ActivityEvent[] // newest first
+}

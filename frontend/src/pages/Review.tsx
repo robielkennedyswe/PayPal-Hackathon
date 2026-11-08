@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { agentView } from '../agentView'
 import { api } from '../api'
 import { Link } from '../components/Link'
+import { navigate } from '../router'
 import { TopBar } from '../components/TopBar'
 import { normalizePrice, type Product, type ProductUpdate, type Shop } from '../types'
 
@@ -131,8 +132,8 @@ export function Review({ shopId }: { shopId: string }) {
     const results = await Promise.all(products.map((p) => save(p.id)))
     if (results.every(Boolean)) {
       try {
-        const s = await api.publishShop(shopId)
-        setShop(s)
+        await api.publishShop(shopId)
+        navigate(`/sell/${shopId}/dashboard`) // step 3: go live
       } catch (e) {
         setPublishError((e as Error).message)
       }
@@ -183,8 +184,8 @@ export function Review({ shopId }: { shopId: string }) {
           </div>
           <div className="head-actions">
             {shop.published && (
-              <Link href={`/s/${shop.slug}`} className="btn">
-                View storefront
+              <Link href={`/sell/${shopId}/dashboard`} className="btn">
+                Dashboard
               </Link>
             )}
             <button
@@ -206,8 +207,8 @@ export function Review({ shopId }: { shopId: string }) {
               <strong>{shop.name} is live to AI agents.</strong>
               <div>Edits you make now go live as soon as they save.</div>
             </div>
-            <Link href={`/s/${shop.slug}`} className="btn btn-primary btn-sm">
-              View your storefront →
+            <Link href={`/sell/${shopId}/dashboard`} className="btn btn-primary btn-sm">
+              Open your dashboard →
             </Link>
           </div>
         )}
