@@ -25,7 +25,7 @@ from app import activity, agent, ai_budget, ai_provider, catalog_ai, mcp_server
 from app.checkout import CheckoutError, Outcome, complete_order, create_checkout
 from app.db import UPLOAD_DIR, get_session, init_db
 from app.models import Event, Order, OrderStatus, Product, Shop
-from app.schemas import AgentChat, CheckoutCreate, DashboardOut, EventOut, OrderOut, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
+from app.schemas import AgentChat, CheckoutCreate, DashboardOut, EventOut, OrderOut, ShopCard, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
 
 FRONTEND_URL = (os.getenv("FRONTEND_URL") or "http://localhost:5173").rstrip("/")
 # Claude's API rejects images over 5 MB, so we enforce the same cap at upload
@@ -274,6 +274,29 @@ def dashboard(shop_id: str, after: int = 0, session: Session = Depends(get_sessi
         units_sold=units_by_product,
         events=[EventOut.of(e, titles.get(e.product_id or "")) for e in events],
     )
+
+
+@app.get("/api/storefronts")
+def list_storefronts(session: Session = Depends(get_session)) -> list[ShopCard]:
+    """Public shop directory: published shops with at least one product,
+    newest first."""
+    shops = session.exec(select(Shop).where(Shop.published == True).order_by(Shop.created_at.desc())).all()  # noqa: E712
+    cards = []
+    for shop in shops:
+        products = _products(session, shop.id)
+        if not products:
+            continue
+        prices = sorted(Decimal(p.price) for p in products)  # Decimal: "100.00" sorts after "20.00"
+        cards.append(ShopCard(
+            name=shop.name,
+            slug=shop.slug,
+            product_count=len(products),
+            in_stock_count=sum(1 for p in products if p.stock > 0),
+            price_min=str(prices[0]),
+            price_max=str(prices[-1]),
+            images=[f"/uploads/{p.image_path}" for p in products if p.image_path][:3],
+        ))
+    return cards
 
 
 @app.get("/api/storefront/{slug}")

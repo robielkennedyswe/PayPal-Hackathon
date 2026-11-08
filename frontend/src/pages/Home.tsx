@@ -1,5 +1,7 @@
 import { Link } from '../components/Link'
+import { ShopGrid } from '../components/ShopGrid'
 import { TopBar } from '../components/TopBar'
+import { useShops } from '../useShops'
 
 const HOW = [
   { side: 'seller', title: 'Snap your products', text: 'Drop in photos. AI writes the title, description, tags and a suggested price.' },
@@ -7,7 +9,10 @@ const HOW = [
   { side: 'agent', title: 'AI agents can buy', text: 'Any MCP-compatible agent can search and check out. Buyers approve every payment in PayPal.' },
 ] as const
 
+const HOME_SHOPS = 6
+
 export function Home() {
+  const { shops } = useShops()
   return (
     <>
       <TopBar />
@@ -36,6 +41,19 @@ export function Home() {
             </article>
           ))}
         </section>
+        {shops && shops.length > 0 && (
+          <section className="home-shops" aria-label="Shops on ShopMCP">
+            <div className="section-head">
+              <h2>Shops on ShopMCP</h2>
+              {shops.length > HOME_SHOPS && (
+                <Link href="/shops" className="btn btn-sm">
+                  See all {shops.length} shops →
+                </Link>
+              )}
+            </div>
+            <ShopGrid shops={shops} limit={HOME_SHOPS} />
+          </section>
+        )}
       </main>
     </>
   )

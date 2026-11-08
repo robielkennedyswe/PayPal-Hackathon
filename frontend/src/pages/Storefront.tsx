@@ -57,6 +57,9 @@ export function Storefront({ slug }: { slug: string }) {
       <TopBar />
       <main className="page">
         <header className="store-head">
+          <Link href="/shops" className="back-link">
+            ← All shops
+          </Link>
           <span className="chip agent">● Live to AI agents</span>
           <h1>{shop.name}</h1>
           <p className="muted">

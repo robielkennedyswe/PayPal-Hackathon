@@ -264,3 +264,28 @@ def test_checkout_then_return_completes_sale(client, monkeypatch):
     assert "status=completed" in r.headers["location"]
     assert client.get(f"/api/orders/{oid}").json()["status"] == "COMPLETED"
     assert stock_of(client, shop_id) == 1
+
+
+def test_storefront_directory_lists_published_shops_only(client):
+    hidden = make_shop(client, "Hidden Kiln")
+    upload(client, hidden["id"])  # never published
+    empty = make_shop(client, "Empty Shop")
+    with Session(engine) as s:  # published but no products: not listed
+        from app.models import Shop
+        shop = s.get(Shop, empty["id"])
+        shop.published = True
+        s.add(shop)
+        s.commit()
+    live = make_shop(client, "Clay Corner")
+    mug = upload(client, live["id"]).json()["id"]
+    upload(client, live["id"], "white_vase.jpg")
+    client.patch(f"/api/products/{mug}", json={"price": "100", "stock": 0})
+    client.post(f"/api/shops/{live['id']}/publish")
+
+    cards = client.get("/api/storefronts").json()
+    assert [c["slug"] for c in cards] == ["clay-corner"]
+    card = cards[0]
+    assert (card["product_count"], card["in_stock_count"]) == (2, 1)
+    assert (card["price_min"], card["price_max"]) == ("28.00", "100.00")  # numeric, not string order
+    assert len(card["images"]) == 2 and all(i.startswith("/uploads/") for i in card["images"])
+    assert "paypal_payee_email" not in card and "id" not in card

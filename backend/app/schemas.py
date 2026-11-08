@@ -182,3 +182,16 @@ class DashboardOut(BaseModel):
     stats: dict  # searches, views, checkouts, sales, units_sold, revenue ("12.00")
     units_sold: dict[str, int]  # product_id -> units sold
     events: list[EventOut]  # newest first
+
+
+class ShopCard(BaseModel):
+    """One shop in the public directory (/shops). Public data only: no
+    seller email, no internal shop id."""
+
+    name: str
+    slug: str
+    product_count: int
+    in_stock_count: int
+    price_min: str
+    price_max: str
+    images: list[str]  # up to 3 product photo URLs for the card mosaic

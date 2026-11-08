@@ -124,3 +124,14 @@ export type Dashboard = {
   units_sold: Record<string, number>
   events: ActivityEvent[] // newest first
 }
+
+/** Public shop directory card (GET /api/storefronts). */
+export type ShopCard = {
+  name: string
+  slug: string
+  product_count: number
+  in_stock_count: number
+  price_min: string
+  price_max: string
+  images: string[]
+}
