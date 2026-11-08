@@ -6,7 +6,7 @@ Project submission for the "Build What's Next with PayPal and AI" hackathon (Dev
 
 ## Status (as of 2026-11-08, end of Sunday's work)
 
-Saturday + Sunday schedule complete and pushed. Seller flow works end to end in mock AI mode. Monday started early: payee check, `create_checkout` (**live-verified**: sandbox approve → `/paypal/return` capture → COMPLETED, stock decremented) and the **MCP server with all 4 tools** are done. **Next:** connect Claude Code as the shopper agent and run a full buy, then the mock `agent.py`.
+Saturday + Sunday schedule complete and pushed. Seller flow works end to end in mock AI mode. Monday started early: payee check, `create_checkout` (**live-verified**: sandbox approve → `/paypal/return` capture → COMPLETED, stock decremented) and the **MCP server with all 4 tools** are done. The mock `agent.py` + `POST /api/agent/chat` are done too. **Next:** connect Claude Code as the shopper agent and run a full buy; then Tuesday (Claude API, screens 3 + 4, deploy).
 
 Done:
 - **Repo:** MIT `LICENSE`, `.env.example`, `.gitignore`. `.env` was never committed.
@@ -16,16 +16,18 @@ Done:
 - **API** (`main.py`, `schemas.py`, `checkout.py`): shops, photo upload → AI draft, product PATCH/DELETE, publish, `GET /api/storefront/{slug}` (published only, no seller email), `GET /api/orders/{id}`, `/paypal/return` + `/paypal/cancel`.
   - `checkout.complete_order()` skips capture when out of stock, is idempotent (atomic conditional update), and handles `ORDER_ALREADY_CAPTURED`.
   - Prices normalize (`"100"` → `"100.00"`) and must be > 0.
-  - 31 pytest tests in `backend/tests/` (PayPal is faked; tests never hit the network).
+  - 37 pytest tests in `backend/tests/` (PayPal is faked; tests never hit the network).
 - **Checkout** (`checkout.create_checkout()` + `POST /api/checkout`): qty 1–10, published shops only, stock check, Decimal totals, seller as payee, line item on the PayPal page. Raises `CheckoutError` with stable codes (`INVALID_QUANTITY`, `PRODUCT_NOT_FOUND`, `OUT_OF_STOCK`, `PAYMENT_PROVIDER_ERROR`). MCP `create_checkout` must call this function. 21 tests.
 - **MCP** (`tools.py` + `mcp_server.py`, `mcp==2.3.0`): `search_products`, `get_product`, `create_checkout`, `get_order_status` at `/mcp` (stateless streamable HTTP, JSON responses). `tools.py` holds the plain functions; **`agent.py` must call these same functions.** The server instructions tell the agent it can't pay and must hand over `approve_url`. `get_order_status` also captures if PayPal says APPROVED but `/paypal/return` was never hit. Verified live with the SDK client.
+- **Shopper agent** (`agent.py`, `POST /api/agent/chat {history, message}` → `{history, turn: {text, tool_calls, cards}}`): history is in **Anthropic Messages format** (tool_use / tool_result blocks), held by the frontend and sent back each turn (server is stateless; trimmed at turn boundaries past 100 messages). Mock brain = keyword script calling the real tools (search → product card → "yes, 2" → checkout/approval card → "ok/done" → status/confirmation card; a "yes" after a checkout checks status, never buys twice). Cards are derived from tool results, so the Claude brain gets them for free. `_claude_brain()` is the Tuesday TODO (returns 501 until then). Verified live.
 - **Frontend** (`frontend/`, React + Vite + TS):
   - Tiny History-API router (`router.ts` + `components/Link.tsx`) instead of react-router.
   - Routes: `/` home, `/sell` and `/sell/:shopId` (screen 1), `/sell/:shopId/review` (screen 2), `/s/:slug` (public storefront), `/checkout/result`.
   - `agentView.ts` defines the JSON shown in "What AI agents will see". **Monday's MCP `get_product` must return this same shape.**
 
 Not done / unverified:
-- Screens 3 (dashboard) and 4 (shopper agent), `agent.py`, Claude API, Render deploy.
+- Screens 3 (dashboard) and 4 (shopper agent), Claude API (`_claude_listing`, `_claude_brain`), Render deploy.
+- `frontend/src/api.ts` error parsing doesn't read `/api/checkout`'s `{detail: {code, message}}` shape (falls back to a generic message).
 - Dashboard activity feed needs events (search/checkout/sold); nothing records searches yet.
 - Verify in docs: Claude's 5 MB image limit, Render persistent disk for `DATA_DIR`.
 - Deployed frontend needs the backend URL (`VITE_API_BASE_URL` or serve the built frontend from FastAPI).
