@@ -1,11 +1,17 @@
-"""Order completion: the server-side half of checkout.
+"""Checkout: create a PayPal order, then capture it after the buyer approves.
 
-PayPal redirects the buyer to /paypal/return after they approve. That route
-calls complete_order(), which captures the payment and decrements stock.
-(Monday: create_checkout() lands here too, shared by the MCP tool and the
-built-in agent.)
+Both halves are plain functions shared by the HTTP routes, the MCP tools and
+the built-in shopper agent, so every entry point follows the same rules.
+
+1. create_checkout() creates a PayPal order with the seller as payee and
+   returns the approval link. The agent hands that link to the human; it can
+   never approve or pay by itself.
+2. PayPal redirects the buyer to /paypal/return after they approve. That
+   route calls complete_order(), which captures and decrements stock.
 
 Safety properties:
+- Stock is checked at create time (fail fast) AND at capture time, because
+  it may sell out while the buyer is on PayPal. Stock is never reserved.
 - Never captures if stock can't cover the order (buyer isn't charged).
 - Idempotent: a refreshed return page or a double redirect can't capture
   twice or decrement stock twice.
@@ -13,13 +19,82 @@ Safety properties:
 
 from __future__ import annotations
 
+from decimal import Decimal
 from enum import Enum
 
 from sqlalchemy import update
 from sqlmodel import Session, select
 
 from app import paypal
-from app.models import Order, OrderStatus, Product
+from app.models import Order, OrderStatus, Product, Shop
+
+MAX_QTY = 10  # per checkout; stops a confused agent from ordering 500 mugs
+CURRENCY = "USD"
+
+
+class CheckoutError(Exception):
+    """A checkout the caller should be told about, not a server bug.
+
+    `code` is stable and machine-readable (agents and the frontend branch on
+    it); `message` is safe to show to a buyer or an AI agent.
+    """
+
+    def __init__(self, code: str, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(f"{code}: {message}")
+
+
+def create_checkout(session: Session, product_id: str, qty: int = 1) -> dict:
+    """Create a PayPal order for `qty` of a product and return its approval link."""
+    if not isinstance(qty, int) or isinstance(qty, bool) or not 1 <= qty <= MAX_QTY:
+        raise CheckoutError("INVALID_QUANTITY", f"qty must be a whole number from 1 to {MAX_QTY}")
+
+    product = session.get(Product, product_id)
+    shop = session.get(Shop, product.shop_id) if product else None
+    # Products in unpublished shops look missing, same as the storefront.
+    if product is None or shop is None or not shop.published:
+        raise CheckoutError("PRODUCT_NOT_FOUND", f"No product with id {product_id!r}")
+    if product.stock < qty:
+        raise CheckoutError(
+            "OUT_OF_STOCK", f"Only {product.stock} of {product.title!r} in stock"
+        )
+
+    # Decimal, not float: 3 * 19.99 must be exactly "59.97".
+    amount = str((Decimal(product.price) * qty).quantize(Decimal("0.01")))
+
+    try:
+        pp_order = paypal.create_order(
+            amount,
+            CURRENCY,
+            description=f"{shop.name}: {product.title}",
+            payee_email=shop.paypal_payee_email,
+            item={"name": product.title, "quantity": qty, "unit_amount": product.price},
+        )
+    except paypal.PayPalError as e:
+        raise CheckoutError("PAYMENT_PROVIDER_ERROR", "PayPal could not create the order") from e
+
+    approve_url = paypal.approve_url(pp_order)
+    if not approve_url:  # shouldn't happen, but never hand an agent a broken link
+        raise CheckoutError("PAYMENT_PROVIDER_ERROR", "PayPal returned no approval link")
+
+    order = Order(paypal_order_id=pp_order["id"], product_id=product.id, qty=qty, amount=amount)
+    session.add(order)
+    session.commit()
+    session.refresh(order)
+
+    return {
+        "order_id": order.id,  # our id; pass to get_order_status
+        "approve_url": approve_url,
+        "amount": amount,
+        "currency": CURRENCY,
+        "product_id": product.id,
+        "title": product.title,
+        "qty": qty,
+        "status": order.status.value,
+        "next_step": "Send approve_url to the buyer. They approve the payment in PayPal; "
+                     "the agent cannot pay on their behalf.",
+    }
 
 
 class Outcome(str, Enum):

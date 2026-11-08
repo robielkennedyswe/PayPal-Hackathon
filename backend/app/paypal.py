@@ -97,20 +97,35 @@ def create_order(
     *,
     description: str | None = None,
     payee_email: str | None = None,
+    item: dict | None = None,
     return_url: str | None = None,
     cancel_url: str | None = None,
 ) -> dict:
     """Create a CAPTURE-intent order. `amount` is a decimal string like "34.00".
 
     payee_email routes the money to the seller's sandbox business account
-    instead of the app's own account. (VERIFY in current Orders v2 docs that
-    payee.email_address is honored for your app's permissions.)
+    instead of the app's own account (Orders v2 `purchase_units[].payee`,
+    verified in the v2.36 spec). PayPal does NOT validate the email at create
+    time: any address is accepted, so a typo only surfaces at approval/capture.
+
+    item = {"name", "quantity": int, "unit_amount": "12.00"} adds a line item
+    so the buyer's PayPal approval page shows what they're paying for.
+    PayPal then requires amount.breakdown.item_total, which must equal
+    unit_amount * quantity (we have no tax/shipping, so it equals amount).
     """
     unit: dict = {"amount": {"currency_code": currency, "value": amount}}
     if description:
         unit["description"] = description[:127]  # PayPal caps description at 127 chars
     if payee_email:
         unit["payee"] = {"email_address": payee_email}
+    if item:
+        unit["items"] = [{
+            "name": item["name"][:127],
+            "quantity": str(item["quantity"]),  # PayPal wants a string here
+            "unit_amount": {"currency_code": currency, "value": item["unit_amount"]},
+            "category": "PHYSICAL_GOODS",
+        }]
+        unit["amount"]["breakdown"] = {"item_total": {"currency_code": currency, "value": amount}}
 
     body = {
         "intent": "CAPTURE",

@@ -20,10 +20,10 @@ from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 
 from app import ai_provider, catalog_ai
-from app.checkout import Outcome, complete_order
+from app.checkout import CheckoutError, Outcome, complete_order, create_checkout
 from app.db import UPLOAD_DIR, get_session, init_db
 from app.models import Order, Product, Shop
-from app.schemas import OrderOut, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
+from app.schemas import CheckoutCreate, OrderOut, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
 
 FRONTEND_URL = (os.getenv("FRONTEND_URL") or "http://localhost:5173").rstrip("/")
 # Claude's API rejects images over 5 MB, so we enforce the same cap at upload
@@ -210,6 +210,26 @@ def storefront(slug: str, session: Session = Depends(get_session)) -> Storefront
     if shop is None or not shop.published:
         raise HTTPException(404, "Shop not found")
     return StorefrontOut.of(shop, _products(session, shop.id))
+
+
+# Map CheckoutError codes to HTTP status. The body keeps the stable code so
+# the frontend can branch on it.
+_CHECKOUT_HTTP = {
+    "INVALID_QUANTITY": 422,
+    "PRODUCT_NOT_FOUND": 404,
+    "OUT_OF_STOCK": 409,
+    "PAYMENT_PROVIDER_ERROR": 502,
+}
+
+
+@app.post("/api/checkout", status_code=201)
+def checkout(body: CheckoutCreate, session: Session = Depends(get_session)) -> dict:
+    """Create a PayPal order; the buyer opens approve_url to pay.
+    Same function the MCP create_checkout tool calls."""
+    try:
+        return create_checkout(session, body.product_id, body.qty)
+    except CheckoutError as e:
+        raise HTTPException(_CHECKOUT_HTTP.get(e.code, 400), {"code": e.code, "message": e.message}) from e
 
 
 @app.get("/api/orders/{order_id}")

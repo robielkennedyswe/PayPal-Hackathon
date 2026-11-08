@@ -76,6 +76,12 @@ class ProductUpdate(BaseModel):
         return v
 
 
+class CheckoutCreate(BaseModel):
+    product_id: str
+    # Range is enforced in checkout.create_checkout so MCP tools get the same rule.
+    qty: int = 1
+
+
 # ---- responses ----
 
 class ProductOut(BaseModel):

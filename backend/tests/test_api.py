@@ -1,4 +1,4 @@
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app import paypal
 from app.db import engine
@@ -186,3 +186,81 @@ def test_return_and_cancel_unknown_token(client):
     assert r.headers["location"].endswith("/checkout/result?status=not_found")
     r = client.get("/paypal/cancel?token=NOPE", follow_redirects=False)
     assert "status=cancelled" in r.headers["location"]
+
+
+# ---------- create_checkout ----------
+
+def published_product(client, stock=3, price="19.99"):
+    shop = make_shop(client)
+    pid = upload(client, shop["id"]).json()["id"]
+    client.patch(f"/api/products/{pid}", json={"stock": stock, "price": price})
+    client.post(f"/api/shops/{shop['id']}/publish")
+    return pid, shop["id"]
+
+
+def fake_create(calls):
+    def _create(amount, currency="USD", **kw):
+        calls.append({"amount": amount, "currency": currency, **kw})
+        return {"id": "PAYPAL123", "status": "PAYER_ACTION_REQUIRED",
+                "links": [{"rel": "payer-action", "href": "https://sandbox.paypal.com/approve?token=PAYPAL123"}]}
+    return _create
+
+
+def test_checkout_creates_order_with_seller_as_payee(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(paypal, "create_order", fake_create(calls))
+    pid, _ = published_product(client)
+
+    r = client.post("/api/checkout", json={"product_id": pid, "qty": 3})
+    assert r.status_code == 201
+    body = r.json()
+    assert body["amount"] == "59.97"  # Decimal math, not float
+    assert body["approve_url"].startswith("https://sandbox.paypal.com/")
+    assert body["order_id"].startswith("ord_") and body["status"] == "CREATED"
+
+    (call,) = calls
+    assert call["amount"] == "59.97" and call["payee_email"] == SELLER
+    assert call["item"] == {"name": body["title"], "quantity": 3, "unit_amount": "19.99"}
+
+    order = client.get(f"/api/orders/{body['order_id']}").json()
+    assert (order["paypal_order_id"], order["qty"], order["amount"]) == ("PAYPAL123", 3, "59.97")
+
+
+def test_checkout_rejections(client, monkeypatch):
+    monkeypatch.setattr(paypal, "create_order", fake_create([]))
+    pid, _ = published_product(client, stock=2)
+    post = lambda **b: client.post("/api/checkout", json={"product_id": pid, **b})
+    assert post(qty=3).json()["detail"]["code"] == "OUT_OF_STOCK"
+    assert post(qty=3).status_code == 409
+    assert post(qty=0).status_code == 422
+    assert post(qty=11).status_code == 422
+    assert client.post("/api/checkout", json={"product_id": "prod_nope"}).status_code == 404
+
+
+def test_checkout_hides_unpublished_products(client):
+    shop = make_shop(client)
+    pid = upload(client, shop["id"]).json()["id"]  # never published
+    r = client.post("/api/checkout", json={"product_id": pid})
+    assert r.status_code == 404  # and no PayPal call (no_network would fail)
+
+
+def test_checkout_reports_paypal_errors_without_saving(client, monkeypatch):
+    def boom(*_a, **_k):
+        raise paypal.PayPalError(422, {"name": "UNPROCESSABLE_ENTITY"})
+    monkeypatch.setattr(paypal, "create_order", boom)
+    pid, _ = published_product(client)
+    r = client.post("/api/checkout", json={"product_id": pid})
+    assert r.status_code == 502 and r.json()["detail"]["code"] == "PAYMENT_PROVIDER_ERROR"
+    with Session(engine) as s:
+        assert s.exec(select(Order)).first() is None
+
+
+def test_checkout_then_return_completes_sale(client, monkeypatch):
+    monkeypatch.setattr(paypal, "create_order", fake_create([]))
+    monkeypatch.setattr(paypal, "capture_order", captured)
+    pid, shop_id = published_product(client, stock=3)
+    oid = client.post("/api/checkout", json={"product_id": pid, "qty": 2}).json()["order_id"]
+    r = client.get("/paypal/return?token=PAYPAL123", follow_redirects=False)
+    assert "status=completed" in r.headers["location"]
+    assert client.get(f"/api/orders/{oid}").json()["status"] == "COMPLETED"
+    assert stock_of(client, shop_id) == 1
