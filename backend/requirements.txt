@@ -13,3 +13,5 @@ sqlmodel==0.0.48
 python-multipart==0.0.33
 # Official MCP Python SDK (2.x: FastMCP is now MCPServer); streamable HTTP server
 mcp==2.3.0
+# Claude API (vision listings + shopper agent); 2.x sends API version 2026-10-21
+anthropic==2.6.0

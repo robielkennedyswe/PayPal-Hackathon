@@ -73,3 +73,31 @@ class Order(SQLModel, table=True):
     status: OrderStatus = OrderStatus.CREATED
     paypal_capture_id: str | None = None  # set on capture; useful for the activity feed
     created_at: datetime = Field(default_factory=_now)
+
+
+class AIUsage(SQLModel, table=True):
+    """Claude API spend per UTC day, for the cost limiter (ai_budget.py).
+
+    Persisted (not in memory) so a restart or redeploy can't reset the
+    budget mid-day.
+    """
+
+    __tablename__ = "ai_usage"
+
+    day: str = Field(primary_key=True)  # "2026-11-10" (UTC)
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0  # estimate from token counts x list price
+
+
+class ListingCache(SQLModel, table=True):
+    """Claude vision results keyed by photo hash: the same photo is never
+    sent to the API twice (re-uploads, retries, deleting and re-adding)."""
+
+    __tablename__ = "listing_cache"
+
+    image_sha256: str = Field(primary_key=True)
+    listing: dict = Field(sa_column=Column(JSON, nullable=False))
+    model: str
+    created_at: datetime = Field(default_factory=_now)

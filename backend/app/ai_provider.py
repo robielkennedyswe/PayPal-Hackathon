@@ -42,3 +42,45 @@ def model() -> str | None:
 
 def is_mock() -> bool:
     return provider() == "mock"
+
+
+# ---------- Claude API (AI_PROVIDER=anthropic) ----------
+# Every Claude request in the app goes through create_message(), so the cost
+# limiter (ai_budget.py) can't be bypassed by a new feature.
+
+# Models that support the server-side refusal fallback ("fallbacks":
+# "default"): if the model declines a request on safety grounds, the API
+# re-runs it on a fallback model inside the same call instead of failing.
+_FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
+_FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
+_client = None
+
+
+def client():
+    """Shared Anthropic client. The SDK reads ANTHROPIC_API_KEY itself; the
+    key is never logged or passed around in our code."""
+    global _client
+    if _client is None:
+        import anthropic  # imported lazily so mock mode works without the SDK configured
+
+        # 60s timeout and 1 retry: a stuck call shouldn't hang the chat, and
+        # each retry is a billed attempt.
+        _client = anthropic.Anthropic(timeout=60.0, max_retries=1)
+    return _client
+
+
+def create_message(*, client_key: str | None = None, **params):
+    """One Claude Messages API call, budget-checked and usage-recorded.
+
+    Raises ai_budget.AIBudgetExceeded (before any request) when a limit is
+    hit, and the SDK's anthropic.APIError subclasses on API failures.
+    """
+    from app import ai_budget
+
+    m = model()
+    ai_budget.reserve(client_key)
+    extra = {"betas": [_FALLBACK_BETA], "fallbacks": "default"} if m in _FALLBACK_MODELS else {}
+    response = client().beta.messages.create(model=m, **extra, **params)
+    ai_budget.record(m, response.usage)
+    return response
