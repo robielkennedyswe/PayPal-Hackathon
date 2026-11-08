@@ -31,3 +31,6 @@ npm-debug.log*
 
 # Claude Code per-user settings
 .claude/settings.local.json
+
+# Claude Code project notes: kept locally for development, not published
+CLAUDE.md
