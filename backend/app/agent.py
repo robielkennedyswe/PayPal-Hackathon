@@ -143,7 +143,8 @@ def _cards(session: Session, calls: list[dict]) -> list[dict]:
 
 # ---------- mock brain ----------
 
-_STATUS_WORDS = {"status", "approved", "approve", "paid", "done", "finished", "completed", "complete", "check"}
+_STATUS_WORDS = {"status", "approved", "approve", "paid", "done", "finished", "completed", "complete", "check",
+                 "payment", "paypal", "pay", "order"}
 _CONFIRM_WORDS = {"yes", "yeah", "yep", "sure", "ok", "okay", "buy", "confirm", "checkout", "purchase",
                   "proceed", "go", "ahead", "it", "that", "one", "please", "do", "want", "take", "get"}
 _STOP_WORDS = {"i", "me", "my", "a", "an", "the", "some", "any", "for", "to", "of", "and", "or", "with",

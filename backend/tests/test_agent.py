@@ -60,7 +60,8 @@ def test_full_scripted_purchase(client, monkeypatch):
     # 4. Buyer approved in PayPal -> status check captures -> confirmation.
     monkeypatch.setattr(paypal, "get_order", lambda _id: {"status": "APPROVED"})
     monkeypatch.setattr(paypal, "capture_order", captured)
-    turn = chat.say("I'm done, I approved it")
+    # Exact text the /agent page sends automatically when it sees the capture.
+    turn = chat.say("I approved the payment in PayPal.")
     assert turn["cards"][0]["type"] == "confirmation"
     assert "Payment confirmed" in turn["text"]
     order_id = turn["cards"][0]["order"]["order_id"]
