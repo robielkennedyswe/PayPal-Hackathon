@@ -7,52 +7,91 @@ Interactive docs: http://localhost:8000/docs
 
 from __future__ import annotations
 
-import os
 import re
 import secrets
-from decimal import Decimal
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import activity, agent, ai_budget, ai_provider, catalog_ai, mcp_server
+from app import activity, agent, ai_budget, ai_provider, catalog_ai, config, mcp_server
 from app.checkout import CheckoutError, Outcome, complete_order, create_checkout
+from app.config import FRONTEND_URL
 from app.db import UPLOAD_DIR, get_session, init_db
 from app.models import Event, Order, OrderStatus, Product, Shop
-from app.schemas import AgentChat, CheckoutCreate, DashboardOut, EventOut, OrderOut, ShopCard, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
+from app.schemas import (
+    AgentChat,
+    CheckoutCreate,
+    DashboardOut,
+    EventOut,
+    OrderOut,
+    ProductOut,
+    ProductUpdate,
+    ShopCard,
+    ShopCreate,
+    ShopOut,
+    StorefrontOut,
+)
 
-FRONTEND_URL = (os.getenv("FRONTEND_URL") or "http://localhost:5173").rstrip("/")
-# Claude's API rejects images over 5 MB, so we enforce the same cap at upload
-# time rather than failing later. (VERIFY the current limit in Anthropic docs.)
+# Claude's API accepts images up to 10 MB base64-encoded (verified in the
+# vision docs); 5 MB raw (~6.7 MB as base64) stays safely under that.
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 DEFAULT_STOCK = 1  # new drafts start with 1; seller edits on the review screen
 
 
-class _MCPMount:
-    """ASGI shim in front of the MCP app. The real app is (re)built in
-    lifespan because the SDK's session manager can only start once."""
+class _SPAStaticFiles(StaticFiles):
+    """Built React app. Unknown paths (/sell/shop_123, /agent...) get
+    index.html so the client-side router can handle them."""
 
-    app = None
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as e:
+            if e.status_code != 404:
+                raise
+            return await super().get_response("index.html", scope)
+
+
+class _RootApp:
+    """Everything no FastAPI route matched: /mcp goes to the MCP server,
+    everything else to the built frontend (deployed) or a 404 (local dev,
+    where Vite serves the frontend).
+
+    Both apps are (re)built in lifespan: the MCP SDK's session manager can
+    only start once, and tests start the app many times.
+    """
+
+    mcp = None
+    frontend = None
 
     async def __call__(self, scope, receive, send):
-        if self.app is None:
-            raise RuntimeError("MCP app not started (lifespan did not run)")
-        await self.app(scope, receive, send)
+        path = scope.get("path", "")
+        if path == "/mcp" or path.startswith("/mcp/"):
+            if self.mcp is None:
+                raise RuntimeError("MCP app not started (lifespan did not run)")
+            return await self.mcp(scope, receive, send)
+        # Unknown API paths stay JSON 404s; they must never return the HTML app.
+        if self.frontend is not None and scope["type"] == "http" and not path.startswith("/api/"):
+            return await self.frontend(scope, receive, send)
+        await JSONResponse({"detail": "Not Found"}, status_code=404)(scope, receive, send)
 
 
-_mcp_mount = _MCPMount()
+_root = _RootApp()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
-    _mcp_mount.app = mcp_server.build_http_app()
+    _root.mcp = mcp_server.build_http_app()
+    dist = config.FRONTEND_DIST
+    _root.frontend = _SPAStaticFiles(directory=dist, html=True) if dist and Path(dist).is_dir() else None
     async with mcp_server.mcp.session_manager.run():
         yield
 
@@ -74,8 +113,18 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # ---------- helpers ----------
 
 def _client_key(request: Request) -> str | None:
-    """Who to rate-limit. Behind Render's proxy this is only the visitor's IP
-    if uvicorn runs with --proxy-headers (VERIFY on deploy)."""
+    """Visitor id for the per-visitor AI rate limit.
+
+    Behind Render's proxy the TCP peer is the proxy, so prefer forwarding
+    headers: True-Client-IP (set by Cloudflare in front of Render), then the
+    first X-Forwarded-For entry. These can be spoofed by a determined client,
+    which only lets them dodge this per-visitor limit: the daily and total
+    budgets in ai_budget.py are the hard caps. (Which header Render sends:
+    VERIFY after deploy.)
+    """
+    forwarded = request.headers.get("true-client-ip") or request.headers.get("x-forwarded-for", "").split(",")[0]
+    if forwarded.strip():
+        return forwarded.strip()[:64]
     return request.client.host if request.client else None
 
 
@@ -377,8 +426,8 @@ def _to_frontend(status: str, order: Order | None) -> RedirectResponse:
     return RedirectResponse(f"{FRONTEND_URL}/checkout/result?{query}", status_code=303)
 
 
-# ---------- MCP (must be last) ----------
+# ---------- MCP + frontend (must be last) ----------
 # Mounted at the root with the MCP app's own route at exactly /mcp: mounting
 # at "/mcp" instead would make Starlette 307-redirect /mcp -> /mcp/, which
 # some MCP clients don't follow on POST. Being last, every route above wins.
-app.mount("/", _mcp_mount)
+app.mount("/", _root)

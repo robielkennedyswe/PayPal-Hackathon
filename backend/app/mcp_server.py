@@ -12,7 +12,6 @@ returns to the model as a readable is_error result instead of a crash).
 
 from __future__ import annotations
 
-import os
 from urllib.parse import urlparse
 
 from mcp.server.mcpserver import MCPServer
@@ -24,7 +23,7 @@ from sqlmodel import Session
 from starlette.applications import Starlette
 from typing import Annotated
 
-from app import activity, tools
+from app import activity, config, tools
 from app.checkout import MAX_QTY, CheckoutError
 from app.db import engine
 
@@ -47,7 +46,7 @@ Payment rules (important):
 mcp = MCPServer(
     name="ShopMCP",
     instructions=INSTRUCTIONS,
-    website_url=os.getenv("FRONTEND_URL") or None,
+    website_url=config.FRONTEND_URL,
 )
 
 _READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
@@ -110,7 +109,7 @@ def get_order_status(
 
 def public_base_url() -> str:
     """Where external agents reach this server (shown on the dashboard)."""
-    return (os.getenv("APP_BASE_URL") or "http://localhost:8000").rstrip("/")
+    return config.APP_BASE_URL
 
 
 def build_http_app() -> Starlette:
@@ -134,11 +133,12 @@ def build_http_app() -> Starlette:
 def _transport_security() -> TransportSecuritySettings:
     """DNS-rebinding protection: only accept requests addressed to our own
     host. The SDK's default allows localhost only, which would reject every
-    request on Render, so add the public host from APP_BASE_URL.
+    request on Render, so add the public host from APP_BASE_URL (which
+    defaults to Render's RENDER_EXTERNAL_URL).
     """
     hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
     origins = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
-    for url in (os.getenv("APP_BASE_URL"), os.getenv("FRONTEND_URL")):
+    for url in (config.APP_BASE_URL, config.FRONTEND_URL):
         parsed = urlparse(url or "")
         if parsed.netloc:
             hosts.append(parsed.netloc)

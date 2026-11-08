@@ -1,0 +1,39 @@
+# Render Blueprint: one Docker web service with a persistent disk.
+# Render dashboard -> New -> Blueprint -> pick this repo. You'll be asked for
+# the `sync: false` secrets once, at creation. Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: shopmcp
+    runtime: docker
+    # A persistent disk needs a paid instance; pick the plan in the dashboard.
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit  # every push to the default branch redeploys
+    disk:
+      name: shopmcp-data
+      mountPath: /var/data     # = DATA_DIR in the Dockerfile: SQLite + photos survive deploys
+      sizeGB: 1
+    envVars:
+      # APP_BASE_URL / FRONTEND_URL are not needed: the app defaults them to
+      # RENDER_EXTERNAL_URL, which Render sets automatically.
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: AI_PROVIDER
+        value: anthropic
+      - key: AI_MODEL
+        value: claude-haiku-5-5        # switch to claude-opus-5-5 for the demo video + judging
+      # Cost limits for the hosted site (separate counter from local dev).
+      - key: AI_TOTAL_BUDGET_USD
+        value: "3.00"
+      - key: AI_DAILY_BUDGET_USD
+        value: "1.50"
+      - key: AI_DAILY_CALL_LIMIT
+        value: "150"
+      - key: AI_CLIENT_HOURLY_CALL_LIMIT
+        value: "40"
+      # Secrets: entered in the Render dashboard, never committed.
+      - key: Client_ID
+        sync: false
+      - key: Secret_Key
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

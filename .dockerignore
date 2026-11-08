@@ -1,0 +1,16 @@
+# Keep secrets, local data and build junk out of the image (and the build context).
+.env
+.env.*
+!.env.example
+.git
+CLAUDE.md
+.claude
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+backend/data
+backend/tests
+frontend/dist
+.DS_Store

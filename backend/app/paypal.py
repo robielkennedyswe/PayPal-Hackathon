@@ -20,7 +20,7 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 SANDBOX_URL = "https://api-m.sandbox.paypal.com"
 BASE_URL = os.getenv("PAYPAL_BASE_URL") or SANDBOX_URL
-APP_BASE_URL = os.getenv("APP_BASE_URL") or "http://localhost:8000"
+from app.config import APP_BASE_URL  # noqa: E402  (after load_dotenv above)
 
 # Hard rule: sandbox only. Refuse to run against anything else.
 if "sandbox" not in BASE_URL:
