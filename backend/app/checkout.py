@@ -25,7 +25,7 @@ from enum import Enum
 from sqlalchemy import update
 from sqlmodel import Session, select
 
-from app import paypal
+from app import activity, paypal
 from app.models import Order, OrderStatus, Product, Shop
 
 MAX_QTY = 10  # per checkout; stops a confused agent from ordering 500 mugs
@@ -83,7 +83,7 @@ def create_checkout(session: Session, product_id: str, qty: int = 1) -> dict:
     session.commit()
     session.refresh(order)
 
-    return {
+    result = {
         "order_id": order.id,  # our id; pass to get_order_status
         "approve_url": approve_url,
         "amount": amount,
@@ -99,6 +99,10 @@ def create_checkout(session: Session, product_id: str, qty: int = 1) -> dict:
         "sandbox_note": "PayPal sandbox (test) payment: open approve_url in a private/incognito "
                         "window and log in with a PayPal sandbox Personal account.",
     }
+    # Built before recording: record() commits, which expires loaded objects.
+    activity.record(session, shop_id=shop.id, kind="checkout", product_id=product.id,
+                    order_id=result["order_id"], detail={"qty": qty, "amount": amount, "title": product.title})
+    return result
 
 
 class Outcome(str, Enum):
@@ -116,13 +120,21 @@ def complete_order(session: Session, paypal_order_id: str) -> tuple[Outcome, Ord
         return Outcome.COMPLETED, order  # already done (page refresh)
 
     product = session.get(Product, order.product_id)
+    credit = activity.order_source(session, order.id)  # the agent that started this order
     if product is None or product.stock < order.qty:
         # Approved but not captured, so no money moves. The authorization
         # simply expires on PayPal's side.
+        if product is not None:
+            activity.record(session, shop_id=product.shop_id, kind="missed", product_id=product.id,
+                            order_id=order.id, detail={"qty": order.qty, "title": product.title},
+                            once=True, event_source=credit)
         return Outcome.OUT_OF_STOCK, order
 
     order.status = OrderStatus.APPROVED
     session.commit()
+    activity.record(session, shop_id=product.shop_id, kind="approved", product_id=product.id,
+                    order_id=order.id, detail={"qty": order.qty, "amount": order.amount, "title": product.title},
+                    once=True, event_source=credit)
 
     try:
         result = paypal.capture_order(paypal_order_id)
@@ -153,6 +165,10 @@ def complete_order(session: Session, paypal_order_id: str) -> tuple[Outcome, Ord
             .values(stock=Product.stock - order.qty)
         )
     session.commit()
+    if claimed == 1:  # exactly once per order, same guarantee as the stock decrement
+        activity.record(session, shop_id=product.shop_id, kind="sold", product_id=product.id,
+                        order_id=order.id, detail={"qty": order.qty, "amount": order.amount, "title": product.title},
+                        event_source=credit)
     session.refresh(order)
     return Outcome.COMPLETED, order
 

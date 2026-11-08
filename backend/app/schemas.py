@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models import Order, OrderStatus, Product, Shop
+from app.models import Event, Order, OrderStatus, Product, Shop
 
 PRICE_PATTERN = r"^\d{1,6}\.\d{2}$"  # "34.00": same format catalog_ai and PayPal use
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"  # loose check; PayPal is the real judge
@@ -157,3 +157,28 @@ class OrderOut(BaseModel):
     @classmethod
     def of(cls, o: Order) -> "OrderOut":
         return cls(**o.model_dump(exclude={"created_at"}), created_at=_utc(o.created_at))
+
+
+class EventOut(BaseModel):
+    id: int
+    kind: str
+    source: str
+    product_id: str | None
+    product_title: str | None
+    order_id: str | None
+    detail: dict
+    created_at: datetime
+
+    @classmethod
+    def of(cls, e: Event, product_title: str | None) -> "EventOut":
+        return cls(**e.model_dump(exclude={"created_at", "shop_id"}),
+                   product_title=product_title or e.detail.get("title"),
+                   created_at=_utc(e.created_at))
+
+
+class DashboardOut(BaseModel):
+    shop: ShopOut
+    mcp_url: str
+    stats: dict  # searches, views, checkouts, sales, units_sold, revenue ("12.00")
+    units_sold: dict[str, int]  # product_id -> units sold
+    events: list[EventOut]  # newest first

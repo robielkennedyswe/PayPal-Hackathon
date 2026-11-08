@@ -101,3 +101,24 @@ class ListingCache(SQLModel, table=True):
     listing: dict = Field(sa_column=Column(JSON, nullable=False))
     model: str
     created_at: datetime = Field(default_factory=_now)
+
+
+class Event(SQLModel, table=True):
+    """Seller activity feed (screen 3): what AI agents did with a shop.
+
+    Kinds: search (products surfaced in a search), view (get_product),
+    checkout (PayPal order created), approved (buyer approved in PayPal),
+    sold (captured), cancelled, missed (sold out before capture).
+    Integer ids so the dashboard can poll for "events after id N".
+    """
+
+    __tablename__ = "events"
+
+    id: int | None = Field(default=None, primary_key=True)
+    shop_id: str = Field(foreign_key="shops.id", index=True)
+    kind: str
+    source: str  # "mcp" (external agent), "agent" (built-in), "web" (PayPal redirects, REST)
+    product_id: str | None = None
+    order_id: str | None = Field(default=None, index=True)
+    detail: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(default_factory=_now)

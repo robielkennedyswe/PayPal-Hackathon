@@ -33,7 +33,7 @@ from functools import lru_cache
 
 from sqlmodel import Session
 
-from app import ai_budget, ai_provider, tools
+from app import activity, ai_budget, ai_provider, tools
 from app.checkout import MAX_QTY, CheckoutError
 from app.models import Product
 
@@ -56,10 +56,11 @@ def chat(session: Session, history: list[dict], message: str, *, client_key: str
     history = list(history) + [{"role": "user", "content": message}]
     turn = _Turn(session, history)
 
-    if ai_provider.is_mock():
-        _mock_brain(turn, message)
-    else:
-        _claude_brain(turn, client_key)
+    with activity.as_source("agent"):  # tool calls below are credited to the built-in agent
+        if ai_provider.is_mock():
+            _mock_brain(turn, message)
+        else:
+            _claude_brain(turn, client_key)
 
     return {
         "history": _trim(turn.history),

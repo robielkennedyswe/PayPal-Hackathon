@@ -20,7 +20,7 @@ from decimal import Decimal, InvalidOperation
 
 from sqlmodel import Session, select
 
-from app import checkout, paypal
+from app import activity, checkout, paypal
 from app.checkout import CheckoutError, Outcome
 from app.models import Order, OrderStatus, Product, Shop
 
@@ -54,7 +54,17 @@ def search_products(session: Session, query: str = "", max_price: float | None =
 
     # Sort: in stock first, then relevance, then cheaper first.
     scored.sort(key=lambda t: (t[1].stock <= 0, -t[0], Decimal(t[1].price)))
-    return [_summary(p, s) for _, p, s in scored[:MAX_RESULTS]]
+    top = scored[:MAX_RESULTS]
+    results = [_summary(p, s) for _, p, s in top]  # built before record() commits
+
+    # One "search" event per shop that appeared in the results.
+    per_shop: dict[str, list[str]] = {}
+    for _, p, s in top:
+        per_shop.setdefault(s.id, []).append(p.title)
+    for shop_id, titles in per_shop.items():
+        activity.record(session, shop_id=shop_id, kind="search",
+                        detail={"query": query, "max_price": max_price, "matches": len(titles), "top": titles[0]})
+    return results
 
 
 def _price_limit(max_price: float | None) -> Decimal | None:
@@ -110,7 +120,7 @@ def get_product(session: Session, product_id: str) -> dict:
     shop = session.get(Shop, product.shop_id) if product else None
     if product is None or shop is None or not shop.published:
         raise CheckoutError("PRODUCT_NOT_FOUND", f"No product with id {product_id!r}")
-    return {
+    listing = {
         "id": product.id,
         "title": product.title,
         "description": product.description,
@@ -122,6 +132,8 @@ def get_product(session: Session, product_id: str) -> dict:
         "shop": {"name": shop.name, "slug": shop.slug},
         "checkout": "Call create_checkout; the buyer approves payment in PayPal.",
     }
+    activity.record(session, shop_id=shop.id, kind="view", product_id=product.id, detail={"title": product.title})
+    return listing
 
 
 # ---------- create_checkout ----------

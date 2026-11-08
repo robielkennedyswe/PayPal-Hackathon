@@ -24,7 +24,7 @@ from sqlmodel import Session
 from starlette.applications import Starlette
 from typing import Annotated
 
-from app import tools
+from app import activity, tools
 from app.checkout import MAX_QTY, CheckoutError
 from app.db import engine
 
@@ -55,7 +55,7 @@ _READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
 def _run(fn, *args):
     """Call a shared tool function with its own DB session."""
-    with Session(engine) as session:
+    with Session(engine) as session, activity.as_source("mcp"):
         try:
             return fn(session, *args)
         except CheckoutError as e:
@@ -106,6 +106,11 @@ def get_order_status(
     # read_only_hint=False: if PayPal shows the order approved but our
     # return URL was never hit, this call finishes the capture.
     return _run(tools.get_order_status, order_id)
+
+
+def public_base_url() -> str:
+    """Where external agents reach this server (shown on the dashboard)."""
+    return (os.getenv("APP_BASE_URL") or "http://localhost:8000").rstrip("/")
 
 
 def build_http_app() -> Starlette:

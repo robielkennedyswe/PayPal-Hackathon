@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import secrets
+from decimal import Decimal
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,11 +21,11 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 
-from app import agent, ai_budget, ai_provider, catalog_ai, mcp_server
+from app import activity, agent, ai_budget, ai_provider, catalog_ai, mcp_server
 from app.checkout import CheckoutError, Outcome, complete_order, create_checkout
 from app.db import UPLOAD_DIR, get_session, init_db
-from app.models import Order, Product, Shop
-from app.schemas import AgentChat, CheckoutCreate, OrderOut, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
+from app.models import Event, Order, OrderStatus, Product, Shop
+from app.schemas import AgentChat, CheckoutCreate, DashboardOut, EventOut, OrderOut, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
 
 FRONTEND_URL = (os.getenv("FRONTEND_URL") or "http://localhost:5173").rstrip("/")
 # Claude's API rejects images over 5 MB, so we enforce the same cap at upload
@@ -231,6 +232,50 @@ def publish_shop(shop_id: str, session: Session = Depends(get_session)) -> ShopO
     return ShopOut.of(shop, _products(session, shop_id))
 
 
+FEED_LIMIT = 50
+
+
+@app.get("/api/shops/{shop_id}/dashboard")
+def dashboard(shop_id: str, after: int = 0, session: Session = Depends(get_session)) -> DashboardOut:
+    """Seller dashboard (screen 3), polled every few seconds.
+
+    after=<last event id seen> returns only newer events, so polling stays
+    cheap; stats and inventory are always current.
+    """
+    shop = _shop_or_404(session, shop_id)
+    products = _products(session, shop_id)
+    titles = {p.id: p.title for p in products}
+    product_ids = list(titles)
+
+    orders = list(session.exec(select(Order).where(Order.product_id.in_(product_ids)))) if product_ids else []
+    sold = [o for o in orders if o.status == OrderStatus.COMPLETED]
+    units_by_product: dict[str, int] = {}
+    for o in sold:
+        units_by_product[o.product_id] = units_by_product.get(o.product_id, 0) + o.qty
+
+    def count(kind: str) -> int:
+        return len(session.exec(select(Event.id).where(Event.shop_id == shop_id, Event.kind == kind)).all())
+
+    query = select(Event).where(Event.shop_id == shop_id, Event.id > after).order_by(Event.id.desc()).limit(FEED_LIMIT)
+    events = list(session.exec(query))
+
+    return DashboardOut(
+        shop=ShopOut.of(shop, products),
+        mcp_url=f"{mcp_server.public_base_url()}/mcp",
+        stats={
+            "searches": count("search"),
+            "views": count("view"),
+            "checkouts": len(orders),
+            "sales": len(sold),
+            "units_sold": sum(o.qty for o in sold),
+            # Decimal sum of decimal strings: no float rounding in money.
+            "revenue": str(sum((Decimal(o.amount) for o in sold), Decimal("0.00"))),
+        },
+        units_sold=units_by_product,
+        events=[EventOut.of(e, titles.get(e.product_id or "")) for e in events],
+    )
+
+
 @app.get("/api/storefront/{slug}")
 def storefront(slug: str, session: Session = Depends(get_session)) -> StorefrontOut:
     """Public shop page data. Unpublished shops look exactly like missing ones."""
@@ -293,6 +338,13 @@ def paypal_return(token: str, session: Session = Depends(get_session)) -> Redire
 @app.get("/paypal/cancel")
 def paypal_cancel(token: str, session: Session = Depends(get_session)) -> RedirectResponse:
     order = session.exec(select(Order).where(Order.paypal_order_id == token)).first()
+    if order is not None:
+        product = session.get(Product, order.product_id)
+        if product is not None:
+            activity.record(session, shop_id=product.shop_id, kind="cancelled", product_id=product.id,
+                            order_id=order.id, detail={"qty": order.qty, "title": product.title},
+                            once=True, event_source=activity.order_source(session, order.id))
+        session.refresh(order)
     return _to_frontend("cancelled", order)
 
 
