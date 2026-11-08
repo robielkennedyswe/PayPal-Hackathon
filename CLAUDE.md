@@ -6,7 +6,7 @@ Project submission for the "Build What's Next with PayPal and AI" hackathon (Dev
 
 ## Status (as of 2026-11-08, end of Sunday's work)
 
-Saturday + Sunday schedule complete and pushed. Seller flow works end to end in mock AI mode. Monday started early: payee check + `create_checkout` done and **live-verified** (sandbox approve → `/paypal/return` capture → COMPLETED, stock decremented). **Next:** MCP server + 4 tools, mock agent.
+Saturday + Sunday schedule complete and pushed. Seller flow works end to end in mock AI mode. Monday started early: payee check, `create_checkout` (**live-verified**: sandbox approve → `/paypal/return` capture → COMPLETED, stock decremented) and the **MCP server with all 4 tools** are done. **Next:** connect Claude Code as the shopper agent and run a full buy, then the mock `agent.py`.
 
 Done:
 - **Repo:** MIT `LICENSE`, `.env.example`, `.gitignore`. `.env` was never committed.
@@ -16,15 +16,17 @@ Done:
 - **API** (`main.py`, `schemas.py`, `checkout.py`): shops, photo upload → AI draft, product PATCH/DELETE, publish, `GET /api/storefront/{slug}` (published only, no seller email), `GET /api/orders/{id}`, `/paypal/return` + `/paypal/cancel`.
   - `checkout.complete_order()` skips capture when out of stock, is idempotent (atomic conditional update), and handles `ORDER_ALREADY_CAPTURED`.
   - Prices normalize (`"100"` → `"100.00"`) and must be > 0.
-  - 21 pytest tests in `backend/tests/` (PayPal is faked; tests never hit the network).
+  - 31 pytest tests in `backend/tests/` (PayPal is faked; tests never hit the network).
 - **Checkout** (`checkout.create_checkout()` + `POST /api/checkout`): qty 1–10, published shops only, stock check, Decimal totals, seller as payee, line item on the PayPal page. Raises `CheckoutError` with stable codes (`INVALID_QUANTITY`, `PRODUCT_NOT_FOUND`, `OUT_OF_STOCK`, `PAYMENT_PROVIDER_ERROR`). MCP `create_checkout` must call this function. 21 tests.
+- **MCP** (`tools.py` + `mcp_server.py`, `mcp==2.3.0`): `search_products`, `get_product`, `create_checkout`, `get_order_status` at `/mcp` (stateless streamable HTTP, JSON responses). `tools.py` holds the plain functions; **`agent.py` must call these same functions.** The server instructions tell the agent it can't pay and must hand over `approve_url`. `get_order_status` also captures if PayPal says APPROVED but `/paypal/return` was never hit. Verified live with the SDK client.
 - **Frontend** (`frontend/`, React + Vite + TS):
   - Tiny History-API router (`router.ts` + `components/Link.tsx`) instead of react-router.
   - Routes: `/` home, `/sell` and `/sell/:shopId` (screen 1), `/sell/:shopId/review` (screen 2), `/s/:slug` (public storefront), `/checkout/result`.
   - `agentView.ts` defines the JSON shown in "What AI agents will see". **Monday's MCP `get_product` must return this same shape.**
 
 Not done / unverified:
-- Screens 3 (dashboard) and 4 (shopper agent), MCP server, `agent.py`, Claude API, Render deploy.
+- Screens 3 (dashboard) and 4 (shopper agent), `agent.py`, Claude API, Render deploy.
+- Dashboard activity feed needs events (search/checkout/sold); nothing records searches yet.
 - Verify in docs: Claude's 5 MB image limit, Render persistent disk for `DATA_DIR`.
 - Deployed frontend needs the backend URL (`VITE_API_BASE_URL` or serve the built frontend from FastAPI).
 
@@ -56,6 +58,10 @@ curl -X POST "https://api-m.sandbox.paypal.com/v1/oauth2/token" \
 - **Commits:** author is `Robiel Kennedy <287809215+robielkennedyswe@users.noreply.github.com>` (repo-local git config). No `Co-Authored-By` trailers, so `robielkennedyswe` stays the only contributor; Claude Code is credited in the README/Devpost instead.
 - **PayPal does not validate `payee.email_address` at create time** (verified 2026-11-08: made-up emails are accepted). A typo only fails at approval/capture. Demo shops must use a real sandbox business email; ideally a *second* sandbox business account so payment visibly goes to the seller, not the app's own account (`sb-jptms53373342@business.example.com`). Spec + error names (`PAYEE_ACCOUNT_INVALID`, `ORDER_ALREADY_CAPTURED`) checked in Orders v2 docs.
 - With `experience_context`, a new PayPal order's status is `PAYER_ACTION_REQUIRED` (not `CREATED`) and the link is `rel: payer-action`.
+- **`mcp` 2.x renamed `FastMCP` to `MCPServer`** (`from mcp.server.mcpserver import MCPServer`). Most online examples are 1.x.
+- **MCP session manager can only `run()` once per instance.** `main.py` rebuilds the MCP app in each lifespan (the `_MCPMount` shim), or the second test client crashes.
+- **MCP DNS-rebinding protection** rejects unknown Host headers (421). `mcp_server._transport_security()` allows localhost plus the hosts from `APP_BASE_URL` / `FRONTEND_URL`, so **set `APP_BASE_URL` to the public URL on Render** or every MCP call fails. Tests use `base_url="http://localhost:8000"` for the same reason.
+- MCP is mounted at `/` (last) with its route at `/mcp`. Mounting at `/mcp` makes Starlette 307-redirect `/mcp` → `/mcp/`.
 - Port 5173 can be taken by another local project. Vite then moves to 5174, which breaks `FRONTEND_URL` redirects.
 
 ## What we're building: ShopMCP
@@ -102,7 +108,7 @@ All AI calls go through one switch so the rest of the app never changes when we 
 - **Built-in shopper agent (`agent.py`)**:
   - Mock: a scripted conversation that still calls the **real** tool functions (real search, real PayPal sandbox order), so the full flow is testable.
   - Anthropic: Claude tool use over the same four tool functions.
-- **Testing the agent with real AI before Tuesday:** connect Claude Code (or Claude Desktop) to the local MCP server as the shopper agent, e.g. `claude mcp add --transport http shopmcp http://localhost:8000/mcp` (verify exact syntax in Claude Code docs). This uses the Claude subscription, not API credits.
+- **Testing the agent with real AI before Tuesday:** connect Claude Code (or Claude Desktop) to the local MCP server as the shopper agent: `claude mcp add --transport http shopmcp http://localhost:8000/mcp` (syntax verified with `claude mcp add --help`). This uses the Claude subscription, not API credits.
 - When switching on Tuesday: use a smaller model while testing, set a monthly spend limit in the Claude Console, and cache generated listings in the DB so the same photo is never sent twice.
 
 ## Stack
