@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { Link } from '../components/Link'
 import { TopBar } from '../components/TopBar'
+import { rememberShop, useMyShops } from '../myShops'
+import { navigate } from '../router'
 import type { ActivityEvent, Dashboard as DashboardData } from '../types'
 
 const POLL_MS = 3000
@@ -18,6 +20,7 @@ export function Dashboard({ shopId }: { shopId: string }) {
   const [fresh, setFresh] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [, setTick] = useState(0) // re-render so "2m ago" stays current
+  const myShops = useMyShops()
   const lastId = useRef(0)
 
   useEffect(() => {
@@ -31,6 +34,7 @@ export function Dashboard({ shopId }: { shopId: string }) {
         const d = await api.getDashboard(shopId, lastId.current)
         if (cancelled) return
         setData(d)
+        if (first) rememberShop(d.shop.id, d.shop.name)
         setError(null)
         if (d.events.length > 0) {
           lastId.current = Math.max(lastId.current, ...d.events.map((e) => e.id))
@@ -60,7 +64,7 @@ export function Dashboard({ shopId }: { shopId: string }) {
   if (error === 'not_found') {
     return (
       <>
-        <TopBar step={3} />
+        <TopBar />
         <main className="page">
           <h1>Shop not found</h1>
           <Link href="/sell" className="btn" style={{ marginTop: 16 }}>
@@ -73,7 +77,7 @@ export function Dashboard({ shopId }: { shopId: string }) {
   if (!data) {
     return (
       <>
-        <TopBar step={3} />
+        <TopBar />
         <main className="page muted">{error ? `Couldn't load the dashboard: ${error}` : 'Loading…'}</main>
       </>
     )
@@ -84,12 +88,28 @@ export function Dashboard({ shopId }: { shopId: string }) {
 
   return (
     <>
-      <TopBar step={3} />
+      <TopBar />
       <main className="page dashboard">
         <header className="page-head">
           <div>
             <h1>{shop.name}</h1>
             <p>Seller dashboard · updates live</p>
+            {myShops.length > 1 && (
+              <label className="shop-switch">
+                <span>Your shops</span>
+                <select
+                  className="input"
+                  value={shop.id}
+                  onChange={(e) => navigate(`/sell/${e.target.value}/dashboard`)}
+                >
+                  {myShops.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           <div className="head-actions">
             <Link href={`/sell/${shop.id}/review`} className="btn">

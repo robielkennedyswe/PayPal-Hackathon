@@ -4,7 +4,9 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { api } from '../api'
 import { Link } from '../components/Link'
+import { SetupSteps } from '../components/SetupSteps'
 import { TopBar } from '../components/TopBar'
+import { rememberShop } from '../myShops'
 import { navigate } from '../router'
 import { EMAIL_RE, type Product, type Shop } from '../types'
 
@@ -50,6 +52,7 @@ export function AddProducts({ shopId }: { shopId?: string }) {
         if (cancelled) return
         shopRef.current = s
         setShop(s)
+        rememberShop(s.id, s.name)
         setName(s.name)
         setEmail(s.paypal_payee_email)
         setDrafts(s.products.map((p) => ({ key: p.id, preview: p.image_url ?? '', status: 'done', product: p })))
@@ -81,6 +84,7 @@ export function AddProducts({ shopId }: { shopId?: string }) {
       .then((s) => {
         shopRef.current = s
         setShop(s)
+        rememberShop(s.id, s.name)
         setFormError(null)
         // Put the shop id in the URL so a refresh resumes this shop.
         navigate(`/sell/${s.id}`, { replace: true })
@@ -183,7 +187,7 @@ export function AddProducts({ shopId }: { shopId?: string }) {
   if (loadError) {
     return (
       <>
-        <TopBar step={1} />
+        <TopBar />
         <main className="page">
           <div className="banner banner-error">Couldn't load this shop: {loadError}</div>
           <Link href="/sell" className="btn">
@@ -196,8 +200,9 @@ export function AddProducts({ shopId }: { shopId?: string }) {
 
   return (
     <>
-      <TopBar step={1} />
+      <TopBar />
       <main className="page">
+        <SetupSteps step={1} />
         <div className="page-head">
           <div>
             <h1>Add your products</h1>

@@ -1,18 +1,33 @@
-import { useLocation } from '../router'
+import { useMyShops } from '../myShops'
+import { matchPath, useLocation } from '../router'
 import { Link } from './Link'
 
-const STEPS = ['Add products', 'Review & publish', 'Go live'] as const
-
-const NAV = [
-  { href: '/shops', label: 'Shops' },
-  { href: '/agent', label: 'Shopper agent' },
-  { href: '/sell', label: 'Sell' },
-] as const
-
-/** Brand bar. Seller flow pages pass `step` (1-based) to show progress
- * instead of the site nav, keeping the seller focused on finishing setup. */
-export function TopBar({ step }: { step?: 1 | 2 | 3 }) {
+/** Site header (matches the Claude Design top bar): brand, main nav with the
+ * current section underlined, and a "PayPal sandbox" badge so nobody mistakes
+ * test payments for real ones. */
+export function TopBar() {
   const { pathname } = useLocation()
+  const myShops = useMyShops()
+
+  // "Your shop": the one in the URL if we're on a seller page, else the most recent.
+  const urlShop = (matchPath('/sell/:shopId', pathname) ??
+    matchPath('/sell/:shopId/review', pathname) ??
+    matchPath('/sell/:shopId/dashboard', pathname))?.shopId
+  const shopId = urlShop ?? myShops[0]?.id
+
+  const onSetup = pathname === '/sell' || (pathname.startsWith('/sell/') && !pathname.endsWith('/dashboard'))
+  const nav = [
+    { label: 'Shops', href: '/shops', active: pathname === '/shops' || pathname.startsWith('/s/') },
+    { label: 'Shop setup', href: shopId ? `/sell/${shopId}` : '/sell', active: onSetup },
+    {
+      label: 'Dashboard',
+      href: shopId ? `/sell/${shopId}/dashboard` : '/sell',
+      active: pathname.endsWith('/dashboard'),
+      title: shopId ? undefined : 'Create a shop first',
+    },
+    { label: 'Try the shopper agent', href: '/agent', active: pathname === '/agent' },
+  ]
+
   return (
     <header className="topbar">
       <div className="topbar-inner">
@@ -20,32 +35,22 @@ export function TopBar({ step }: { step?: 1 | 2 | 3 }) {
           <img src="/favicon.svg" alt="" />
           ShopMCP
         </Link>
-        {!step && (
-          <nav className="site-nav" aria-label="Main">
-            {NAV.map((n) => {
-              const active = pathname === n.href || (n.href === '/shops' && pathname.startsWith('/s/'))
-              return (
-                <Link key={n.href} href={n.href} className={active ? 'active' : ''} aria-current={active ? 'page' : undefined}>
-                  {n.label}
-                </Link>
-              )
-            })}
-          </nav>
-        )}
-        {step && (
-          <ol className="steps" aria-label="Seller setup progress">
-            {STEPS.map((label, i) => {
-              const n = i + 1
-              const state = n === step ? 'current' : n < step ? 'done' : ''
-              return (
-                <li key={label} className={state} aria-current={n === step ? 'step' : undefined}>
-                  <span className="num">{n < step ? '✓' : n}</span>
-                  <span className="label">{label}</span>
-                </li>
-              )
-            })}
-          </ol>
-        )}
+        <nav className="site-nav" aria-label="Main">
+          {nav.map((n) => (
+            <Link
+              key={n.label}
+              href={n.href}
+              title={n.title}
+              className={n.active ? 'active' : ''}
+              aria-current={n.active ? 'page' : undefined}
+            >
+              {n.label}
+            </Link>
+          ))}
+        </nav>
+        <span className="sandbox-badge" title="Payments use PayPal's sandbox: test money only">
+          PayPal sandbox
+        </span>
       </div>
     </header>
   )

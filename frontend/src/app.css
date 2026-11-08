@@ -1922,3 +1922,75 @@ textarea.input {
   align-items: flex-start;
   gap: var(--space-3);
 }
+
+/* ---------- top bar v2 (Claude Design): brand | nav | sandbox badge ---------- */
+
+.topbar-inner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+}
+
+.site-nav {
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.site-nav a {
+  padding: 6px 2px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+}
+
+.site-nav a:hover {
+  background: none;
+}
+
+.site-nav a.active {
+  border-bottom-color: var(--ink);
+}
+
+.sandbox-badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fdf3e2;
+  color: var(--warning);
+  border: 1px solid #f6dfb5;
+  white-space: nowrap;
+}
+
+/* Narrow screens: nav drops to its own scrollable row under the brand. */
+@media (max-width: 760px) {
+  .topbar-inner {
+    grid-template-columns: 1fr auto;
+    row-gap: var(--space-2);
+  }
+  .site-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
+.setup-steps {
+  margin-bottom: var(--space-4);
+}
+
+.shop-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.shop-switch .input {
+  width: auto;
+  padding: 5px 8px;
+  font-size: 13px;
+}

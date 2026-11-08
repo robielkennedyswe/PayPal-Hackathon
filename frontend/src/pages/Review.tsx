@@ -6,7 +6,9 @@ import { agentView } from '../agentView'
 import { api } from '../api'
 import { Link } from '../components/Link'
 import { navigate } from '../router'
+import { SetupSteps } from '../components/SetupSteps'
 import { TopBar } from '../components/TopBar'
+import { rememberShop } from '../myShops'
 import { normalizePrice, type Product, type ProductUpdate, type Shop } from '../types'
 
 /** Form values are strings while editing; parsed and validated on save. */
@@ -72,6 +74,7 @@ export function Review({ shopId }: { shopId: string }) {
       .then((s) => {
         if (cancelled) return
         setShop(s)
+        rememberShop(s.id, s.name)
         setProducts(s.products)
         setForms(Object.fromEntries(s.products.map((p) => [p.id, toForm(p)])))
         setSelected(s.products[0]?.id ?? null)
@@ -146,7 +149,7 @@ export function Review({ shopId }: { shopId: string }) {
   if (loadError) {
     return (
       <>
-        <TopBar step={2} />
+        <TopBar />
         <main className="page">
           <div className="banner banner-error">Couldn't load this shop: {loadError}</div>
           <Link href="/sell" className="btn">
@@ -159,7 +162,7 @@ export function Review({ shopId }: { shopId: string }) {
   if (!shop) {
     return (
       <>
-        <TopBar step={2} />
+        <TopBar />
         <main className="page muted">Loading…</main>
       </>
     )
@@ -170,8 +173,9 @@ export function Review({ shopId }: { shopId: string }) {
 
   return (
     <>
-      <TopBar step={shop.published ? 3 : 2} />
+      <TopBar />
       <main className="page">
+        <SetupSteps step={shop.published ? 3 : 2} />
         <div className="page-head">
           <div>
             <Link href={`/sell/${shopId}`} className="back-link">
