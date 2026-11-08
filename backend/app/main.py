@@ -19,11 +19,11 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 
-from app import ai_provider, catalog_ai, mcp_server
+from app import agent, ai_provider, catalog_ai, mcp_server
 from app.checkout import CheckoutError, Outcome, complete_order, create_checkout
 from app.db import UPLOAD_DIR, get_session, init_db
 from app.models import Order, Product, Shop
-from app.schemas import CheckoutCreate, OrderOut, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
+from app.schemas import AgentChat, CheckoutCreate, OrderOut, ProductOut, ProductUpdate, ShopCreate, ShopOut, StorefrontOut
 
 FRONTEND_URL = (os.getenv("FRONTEND_URL") or "http://localhost:5173").rstrip("/")
 # Claude's API rejects images over 5 MB, so we enforce the same cap at upload
@@ -247,6 +247,15 @@ def checkout(body: CheckoutCreate, session: Session = Depends(get_session)) -> d
         return create_checkout(session, body.product_id, body.qty)
     except CheckoutError as e:
         raise HTTPException(_CHECKOUT_HTTP.get(e.code, 400), {"code": e.code, "message": e.message}) from e
+
+
+@app.post("/api/agent/chat")
+def agent_chat(body: AgentChat, session: Session = Depends(get_session)) -> dict:
+    """One shopper-agent turn (screen 4). Send back the returned history next time."""
+    try:
+        return agent.chat(session, body.history, body.message.strip())
+    except NotImplementedError as e:  # AI_PROVIDER=anthropic before Tuesday's work
+        raise HTTPException(501, str(e)) from e
 
 
 @app.get("/api/orders/{order_id}")

@@ -82,6 +82,14 @@ class CheckoutCreate(BaseModel):
     qty: int = 1
 
 
+class AgentChat(BaseModel):
+    # History is the Anthropic-format message list the previous response
+    # returned. It comes from the browser, so it's bounded; tool calls
+    # re-validate everything server-side regardless of what it contains.
+    history: list[dict] = Field(default_factory=list, max_length=100)  # = agent.MAX_HISTORY_MESSAGES
+    message: str = Field(min_length=1, max_length=1000)
+
+
 # ---- responses ----
 
 class ProductOut(BaseModel):
