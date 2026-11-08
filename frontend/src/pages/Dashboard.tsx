@@ -9,6 +9,7 @@ import { Link } from '../components/Link'
 import { TopBar } from '../components/TopBar'
 import { rememberShop, useMyShops } from '../myShops'
 import { navigate } from '../router'
+import { timeAgo } from '../time'
 import type { ActivityEvent, Dashboard as DashboardData } from '../types'
 
 const POLL_MS = 3000
@@ -351,15 +352,6 @@ const ICON: Record<ActivityEvent['kind'], string> = {
   sold: '$',
   cancelled: '×',
   missed: '!',
-}
-
-function timeAgo(iso: string): string {
-  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
-  if (s < 10) return 'just now'
-  if (s < 60) return `${s}s ago`
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
-  return new Date(iso).toLocaleDateString()
 }
 
 /** "1234.50" -> "1,234.50" without going through floats for the cents. */

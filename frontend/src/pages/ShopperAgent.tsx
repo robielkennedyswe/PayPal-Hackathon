@@ -3,13 +3,16 @@
 // approval and confirmation cards), a trace of every tool call on the right.
 //
 // The server is stateless: it returns the whole conversation (`history`,
-// Anthropic message format) each turn and we send it back next time. It's
-// kept in sessionStorage so a refresh doesn't lose the chat.
+// Anthropic message format) each turn and we send it back next time.
+// Conversations are saved in this browser (chatStore.ts) and listed in the
+// Recents sidebar, like Claude or ChatGPT.
 
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from '../api'
+import { chatTitle, loadChats, newChatId, saveChats, type ChatEntry, type ChatStore } from '../chatStore'
 import { Link } from '../components/Link'
 import { TopBar } from '../components/TopBar'
+import { timeAgo } from '../time'
 import type { AgentCard, AgentCheckout, AgentHistory, AgentOrderStatus, AgentProduct, ToolCall } from '../types'
 
 type Entry =
@@ -18,49 +21,44 @@ type Entry =
   | { kind: 'note'; text: string }
 
 type Saved = { history: AgentHistory; entries: Entry[] }
+type Chat = ChatEntry<Entry>
 
-const STORAGE_KEY = 'shopmcp.agent.v1'
+const EMPTY: Saved = { history: [], entries: [] }
 const SUGGESTIONS = ['Find me a blue mug under $40', 'Show me something for the kitchen', 'Any vases?']
 const POLL_MS = 3000
 const POLL_FOR_MS = 15 * 60 * 1000 // stop polling an approval after 15 min
 const APPROVED_MESSAGE = 'I approved the payment in PayPal.'
 
-// sessionStorage can throw (private mode, blocked storage): never let it break the page.
-function load(): Saved {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as Saved
-  } catch {
-    /* fall through to an empty chat */
-  }
-  return { history: [], entries: [] }
-}
-
-function save(s: Saved) {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s))
-  } catch {
-    /* not persisted; chat still works */
-  }
-}
-
 export function ShopperAgent() {
-  const [state, setState] = useState<Saved>(load)
+  const [store, setStore] = useState<ChatStore<Entry>>(loadChats<Entry>)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<'mock' | 'anthropic' | null>(null)
   const [openCall, setOpenCall] = useState<string | null>(null)
-  // Ref mirrors state so send() always builds on the latest history, even
-  // when called from a poller set up several renders ago.
+  const active = store.chats.find((c) => c.id === store.activeId) ?? null
+  const state: Saved = active ?? EMPTY
+  // Refs mirror state so send() always builds on the latest conversation,
+  // even when called from a poller set up several renders ago.
   const stateRef = useRef(state)
+  const activeIdRef = useRef(store.activeId)
   const busyRef = useRef(false)
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     stateRef.current = state
-    save(state)
-  }, [state])
+    activeIdRef.current = store.activeId
+    saveChats(store)
+  }, [store, state])
+
+  /** Apply a change to one conversation (by id, so a reply always lands in
+   * the chat it belongs to) and bump it to the top of Recents. */
+  const updateChat = useCallback((id: string, change: (c: Chat) => Partial<Chat>) => {
+    setStore((s) => ({
+      ...s,
+      chats: s.chats.map((c) => (c.id === id ? { ...c, ...change(c), updatedAt: Date.now() } : c)),
+    }))
+  }, [])
 
   useEffect(() => {
     api.health().then((h) => setMode(h.ai_provider)).catch(() => setMode(null))
@@ -79,13 +77,25 @@ export function ShopperAgent() {
     setError(null)
     const before = stateRef.current
     const shown: Entry = opts.note ? { kind: 'note', text: opts.note } : { kind: 'user', text }
-    setState({ ...before, entries: [...before.entries, shown] })
+
+    // First message of a new chat: create the conversation, titled by it.
+    let id = activeIdRef.current
+    if (!id) {
+      const chatId = newChatId()
+      id = chatId
+      activeIdRef.current = chatId
+      const chat: Chat = { id: chatId, title: chatTitle(text), updatedAt: Date.now(), history: [], entries: [shown] }
+      setStore((s) => ({ chats: [chat, ...s.chats], activeId: chatId }))
+    } else {
+      updateChat(id, (c) => ({ entries: [...c.entries, shown] }))
+    }
+
     try {
       const reply = await api.agentChat(before.history, text)
-      setState((s) => ({
+      updateChat(id, (c) => ({
         history: reply.history,
         entries: [
-          ...s.entries,
+          ...c.entries,
           { kind: 'agent', text: reply.turn.text, toolCalls: reply.turn.tool_calls, cards: reply.turn.cards },
         ],
       }))
@@ -96,7 +106,7 @@ export function ShopperAgent() {
       setBusy(false)
     }
     return true
-  }, [])
+  }, [updateChat])
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -105,11 +115,23 @@ export function ShopperAgent() {
     setDraft('')
   }
 
-  const reset = () => {
-    setState({ history: [], entries: [] })
+  // Switching is blocked while the agent is replying, so a reply can't land
+  // in a conversation the user has navigated away from mid-request.
+  const openChat = (id: string | null) => {
+    if (busyRef.current) return
+    setStore((s) => ({ ...s, activeId: id }))
     setError(null)
     setOpenCall(null)
+    setDraft('')
   }
+
+  const deleteChat = (id: string) => {
+    if (busyRef.current) return
+    setStore((s) => ({ chats: s.chats.filter((c) => c.id !== id), activeId: s.activeId === id ? null : s.activeId }))
+    if (store.activeId === id) setOpenCall(null)
+  }
+
+  const recents = [...store.chats].sort((a, b) => b.updatedAt - a.updatedAt)
 
   // Orders already confirmed in the chat, so their approval cards show "Paid"
   // and stop polling.
@@ -153,15 +175,48 @@ export function ShopperAgent() {
                 {mode === 'anthropic' ? 'Claude' : 'Mock AI (dev)'}
               </span>
             )}
-            {state.entries.length > 0 && (
-              <button type="button" className="btn btn-sm" onClick={reset} disabled={busy}>
-                New chat
-              </button>
-            )}
           </div>
         </header>
 
         <div className="agent-layout">
+          <aside className="card recents" aria-label="Recent chats">
+            <button type="button" className="btn btn-agent btn-sm new-chat" onClick={() => openChat(null)} disabled={busy}>
+              + New chat
+            </button>
+            <h2>Recents</h2>
+            {recents.length === 0 ? (
+              <p className="recents-empty">Your chats will show up here.</p>
+            ) : (
+              <ul className="recents-list">
+                {recents.map((c) => (
+                  <li key={c.id} className={c.id === store.activeId ? 'active' : ''}>
+                    <button
+                      type="button"
+                      className="recent-open"
+                      onClick={() => openChat(c.id)}
+                      disabled={busy}
+                      aria-current={c.id === store.activeId ? 'true' : undefined}
+                    >
+                      <span className="recent-title">{c.title}</span>
+                      <span className="recent-time">{timeAgo(c.updatedAt)}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="recent-delete"
+                      onClick={() => deleteChat(c.id)}
+                      disabled={busy}
+                      aria-label={`Delete chat: ${c.title}`}
+                      title="Delete chat"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="recents-note">Saved in this browser only.</p>
+          </aside>
+
           <section className="card chat" aria-label="Chat with the shopper agent">
             <div className="chat-log" aria-live="polite">
               {state.entries.length === 0 && (

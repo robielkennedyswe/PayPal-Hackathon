@@ -1978,3 +1978,169 @@ textarea.input {
   padding: 5px 8px;
   font-size: 13px;
 }
+
+/* ---------- shopper agent: Recents sidebar ---------- */
+
+/* Three columns: Recents | chat | trace. */
+.agent-layout {
+  grid-template-columns: 220px minmax(0, 1fr) 320px;
+}
+
+/* Medium screens: trace moves under the chat. */
+@media (max-width: 1100px) {
+  .agent-layout {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .agent-layout .trace {
+    grid-column: 1 / -1;
+    position: static;
+  }
+}
+
+/* Narrow screens: everything stacks; Recents becomes a short scrollable list. */
+@media (max-width: 760px) {
+  .agent-layout {
+    grid-template-columns: 1fr;
+  }
+  .recents {
+    max-height: 240px;
+  }
+}
+
+.recents {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3);
+  height: calc(100vh - 220px);
+  min-height: 300px;
+  overflow: hidden;
+  position: sticky;
+  top: 72px;
+}
+
+.new-chat {
+  width: 100%;
+}
+
+.recents h2 {
+  font-size: 12px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  margin: var(--space-4) var(--space-2) var(--space-2);
+}
+
+.recents-empty {
+  font-size: 13px;
+  color: var(--ink-faint);
+  padding: 0 var(--space-2);
+}
+
+.recents-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recents-list li {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.recents-list li:hover,
+.recents-list li.active {
+  background: var(--bg);
+}
+
+.recents-list li.active {
+  box-shadow: inset 2px 0 0 var(--agent);
+}
+
+.recent-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  background: none;
+  border: none;
+  padding: 7px var(--space-2);
+  text-align: left;
+  color: inherit;
+}
+
+.recent-open:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Only the cursor: opacity here would un-hide the hover-only delete buttons. */
+.recent-delete:disabled {
+  cursor: not-allowed;
+}
+
+.recent-title {
+  font-size: 13px;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recents-list li.active .recent-title {
+  font-weight: 600;
+}
+
+.recent-time {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.recent-delete {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-faint);
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0;
+}
+
+/* Delete shows on hover/focus (always on touch screens, which can't hover). */
+.recents-list li:hover .recent-delete,
+.recent-delete:focus-visible,
+.recents-list li.active .recent-delete {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .recent-delete {
+    opacity: 1;
+  }
+}
+
+.recent-delete:hover {
+  color: var(--danger);
+  background: #fdecec;
+}
+
+.recents-note {
+  font-size: 11px;
+  color: var(--ink-faint);
+  padding: var(--space-2) var(--space-2) 0;
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-2);
+}
