@@ -6,7 +6,7 @@ Project submission for the "Build What's Next with PayPal and AI" hackathon (Dev
 
 ## Status (as of 2026-11-08, end of Sunday's work)
 
-Saturday + Sunday schedule complete and pushed. Seller flow works end to end in mock AI mode. Monday started early: payee check, `create_checkout` (**live-verified**: sandbox approve → `/paypal/return` capture → COMPLETED, stock decremented) and the **MCP server with all 4 tools** are done. The mock `agent.py` + `POST /api/agent/chat` are done too. **Next:** connect Claude Code as the shopper agent and run a full buy; then Tuesday (Claude API, screens 3 + 4, deploy).
+Saturday + Sunday schedule complete and pushed. Seller flow works end to end in mock AI mode. Monday started early: payee check, `create_checkout` (**live-verified**: sandbox approve → `/paypal/return` capture → COMPLETED, stock decremented) and the **MCP server with all 4 tools** are done. The mock `agent.py` + `POST /api/agent/chat` are done too. **Monday is done:** Claude Code, connected over MCP as the shopper agent, completed a real sandbox purchase (`ord_0bf1839689ae`: confirmed item + total first, handed over the PayPal link, waited for COMPLETED). **Next: Tuesday** (screen 4 in mock mode first, then Claude API, screen 3, deploy).
 
 Done:
 - **Repo:** MIT `LICENSE`, `.env.example`, `.gitignore`. `.env` was never committed.
@@ -110,7 +110,7 @@ All AI calls go through one switch so the rest of the app never changes when we 
 - **Built-in shopper agent (`agent.py`)**:
   - Mock: a scripted conversation that still calls the **real** tool functions (real search, real PayPal sandbox order), so the full flow is testable.
   - Anthropic: Claude tool use over the same four tool functions.
-- **Testing the agent with real AI before Tuesday:** connect Claude Code (or Claude Desktop) to the local MCP server as the shopper agent: `claude mcp add --transport http shopmcp http://localhost:8000/mcp` (syntax verified with `claude mcp add --help`). This uses the Claude subscription, not API credits.
+- **Testing the agent with real AI before Tuesday:** connect Claude Code (or Claude Desktop) to the local MCP server as the shopper agent: `claude mcp add --transport http shopmcp http://localhost:8000/mcp` (syntax verified with `claude mcp add --help`). Local scope: works only when `claude` is started from the repo root. Note this Claude Code session also reads `CLAUDE.md`, so it knows things an outside agent won't; anything an agent must know goes in the MCP instructions or tool results. This uses the Claude subscription, not API credits.
 - When switching on Tuesday: use a smaller model while testing, set a monthly spend limit in the Claude Console, and cache generated listings in the DB so the same photo is never sent twice.
 
 ## Stack
