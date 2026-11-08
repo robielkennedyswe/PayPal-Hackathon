@@ -6,7 +6,7 @@ Project submission for the "Build What's Next with PayPal and AI" hackathon (Dev
 
 ## Status (as of 2026-11-08, end of Sunday's work)
 
-Saturday + Sunday schedule complete and pushed. Seller flow works end to end in mock AI mode. **Next: Monday** (payee check, `create_checkout`, MCP server + 4 tools, mock agent).
+Saturday + Sunday schedule complete and pushed. Seller flow works end to end in mock AI mode. Monday started early: payee check + `create_checkout` done and **live-verified** (sandbox approve → `/paypal/return` capture → COMPLETED, stock decremented). **Next:** MCP server + 4 tools, mock agent.
 
 Done:
 - **Repo:** MIT `LICENSE`, `.env.example`, `.gitignore`. `.env` was never committed.
@@ -16,16 +16,16 @@ Done:
 - **API** (`main.py`, `schemas.py`, `checkout.py`): shops, photo upload → AI draft, product PATCH/DELETE, publish, `GET /api/storefront/{slug}` (published only, no seller email), `GET /api/orders/{id}`, `/paypal/return` + `/paypal/cancel`.
   - `checkout.complete_order()` skips capture when out of stock, is idempotent (atomic conditional update), and handles `ORDER_ALREADY_CAPTURED`.
   - Prices normalize (`"100"` → `"100.00"`) and must be > 0.
-  - 16 pytest tests in `backend/tests/` (PayPal is faked; tests never hit the network).
+  - 21 pytest tests in `backend/tests/` (PayPal is faked; tests never hit the network).
+- **Checkout** (`checkout.create_checkout()` + `POST /api/checkout`): qty 1–10, published shops only, stock check, Decimal totals, seller as payee, line item on the PayPal page. Raises `CheckoutError` with stable codes (`INVALID_QUANTITY`, `PRODUCT_NOT_FOUND`, `OUT_OF_STOCK`, `PAYMENT_PROVIDER_ERROR`). MCP `create_checkout` must call this function. 21 tests.
 - **Frontend** (`frontend/`, React + Vite + TS):
   - Tiny History-API router (`router.ts` + `components/Link.tsx`) instead of react-router.
   - Routes: `/` home, `/sell` and `/sell/:shopId` (screen 1), `/sell/:shopId/review` (screen 2), `/s/:slug` (public storefront), `/checkout/result`.
   - `agentView.ts` defines the JSON shown in "What AI agents will see". **Monday's MCP `get_product` must return this same shape.**
 
 Not done / unverified:
-- `/paypal/return` has only been tested with faked PayPal responses; do a live approve → capture once `create_checkout` exists.
 - Screens 3 (dashboard) and 4 (shopper agent), MCP server, `agent.py`, Claude API, Render deploy.
-- Verify in docs: `payee.email_address` (Orders v2), `ORDER_ALREADY_CAPTURED` issue name, Claude's 5 MB image limit, Render persistent disk for `DATA_DIR`.
+- Verify in docs: Claude's 5 MB image limit, Render persistent disk for `DATA_DIR`.
 - Deployed frontend needs the backend URL (`VITE_API_BASE_URL` or serve the built frontend from FastAPI).
 
 ### Running locally
@@ -54,6 +54,8 @@ curl -X POST "https://api-m.sandbox.paypal.com/v1/oauth2/token" \
 - **SQLAlchemy expires objects on commit**, and pydantic `model_dump` reads expired SQLModel objects as empty instead of reloading them. Re-query or `refresh()` after `commit()` before building a response.
 - **Don't disable a button while a blur-triggered save runs.** Clicking Publish right after editing blurred the field, started a save, disabled the button mid-click, and silently dropped the click. `publish()` saves pending edits itself instead.
 - **Commits:** author is `Robiel Kennedy <287809215+robielkennedyswe@users.noreply.github.com>` (repo-local git config). No `Co-Authored-By` trailers, so `robielkennedyswe` stays the only contributor; Claude Code is credited in the README/Devpost instead.
+- **PayPal does not validate `payee.email_address` at create time** (verified 2026-11-08: made-up emails are accepted). A typo only fails at approval/capture. Demo shops must use a real sandbox business email; ideally a *second* sandbox business account so payment visibly goes to the seller, not the app's own account (`sb-jptms53373342@business.example.com`). Spec + error names (`PAYEE_ACCOUNT_INVALID`, `ORDER_ALREADY_CAPTURED`) checked in Orders v2 docs.
+- With `experience_context`, a new PayPal order's status is `PAYER_ACTION_REQUIRED` (not `CREATED`) and the link is `rel: payer-action`.
 - Port 5173 can be taken by another local project. Vite then moves to 5174, which breaks `FRONTEND_URL` redirects.
 
 ## What we're building: ShopMCP
