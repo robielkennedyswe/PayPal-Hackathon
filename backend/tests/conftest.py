@@ -26,7 +26,9 @@ from app.main import app  # noqa: E402
 def client():
     # Fresh tables per test so tests can't leak state into each other.
     SQLModel.metadata.drop_all(engine)
-    with TestClient(app) as c:  # runs lifespan -> init_db()
+    # localhost base URL: the MCP endpoint rejects unknown Host headers
+    # (DNS-rebinding protection), and TestClient defaults to "testserver".
+    with TestClient(app, base_url="http://localhost:8000") as c:  # runs lifespan
         yield c
 
 

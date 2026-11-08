@@ -1,4 +1,4 @@
-# Web framework + server (FastAPI app; MCP server mounts here on Monday)
+# Web framework + server (FastAPI app; MCP server is mounted at /mcp)
 fastapi==0.162.2
 uvicorn[standard]==0.54.0
 # HTTP client for PayPal REST calls
@@ -11,3 +11,5 @@ pydantic==2.14.3
 sqlmodel==0.0.48
 # Multipart form parsing for photo uploads (FastAPI UploadFile)
 python-multipart==0.0.33
+# Official MCP Python SDK (2.x: FastMCP is now MCPServer); streamable HTTP server
+mcp==2.3.0

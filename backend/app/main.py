@@ -19,7 +19,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 
-from app import ai_provider, catalog_ai
+from app import ai_provider, catalog_ai, mcp_server
 from app.checkout import CheckoutError, Outcome, complete_order, create_checkout
 from app.db import UPLOAD_DIR, get_session, init_db
 from app.models import Order, Product, Shop
@@ -32,10 +32,27 @@ MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 DEFAULT_STOCK = 1  # new drafts start with 1; seller edits on the review screen
 
 
+class _MCPMount:
+    """ASGI shim in front of the MCP app. The real app is (re)built in
+    lifespan because the SDK's session manager can only start once."""
+
+    app = None
+
+    async def __call__(self, scope, receive, send):
+        if self.app is None:
+            raise RuntimeError("MCP app not started (lifespan did not run)")
+        await self.app(scope, receive, send)
+
+
+_mcp_mount = _MCPMount()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
-    yield
+    _mcp_mount.app = mcp_server.build_http_app()
+    async with mcp_server.mcp.session_manager.run():
+        yield
 
 
 app = FastAPI(title="ShopMCP", lifespan=lifespan)
@@ -260,3 +277,10 @@ def _to_frontend(status: str, order: Order | None) -> RedirectResponse:
     # 303 so the browser does a plain GET of the frontend page.
     query = f"status={status}" + (f"&order={order.id}" if order else "")
     return RedirectResponse(f"{FRONTEND_URL}/checkout/result?{query}", status_code=303)
+
+
+# ---------- MCP (must be last) ----------
+# Mounted at the root with the MCP app's own route at exactly /mcp: mounting
+# at "/mcp" instead would make Starlette 307-redirect /mcp -> /mcp/, which
+# some MCP clients don't follow on POST. Being last, every route above wins.
+app.mount("/", _mcp_mount)
