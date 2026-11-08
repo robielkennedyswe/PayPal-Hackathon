@@ -111,11 +111,3 @@ def test_long_history_is_trimmed_at_turn_boundaries(client, monkeypatch):
         chat.say("mug")  # 4 messages per search turn + 2 tool msgs
     assert len(chat.history) <= 10
     assert chat.history[0]["role"] == "user" and isinstance(chat.history[0]["content"], str)
-
-
-def test_anthropic_mode_not_ready_yet(client, monkeypatch):
-    monkeypatch.setenv("AI_PROVIDER", "anthropic")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
-    monkeypatch.setenv("AI_MODEL", "test")
-    r = client.post("/api/agent/chat", json={"history": [], "message": "mug"})
-    assert r.status_code == 501

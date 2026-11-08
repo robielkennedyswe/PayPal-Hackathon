@@ -13,13 +13,14 @@ import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 
-from app import agent, ai_provider, catalog_ai, mcp_server
+from app import agent, ai_budget, ai_provider, catalog_ai, mcp_server
 from app.checkout import CheckoutError, Outcome, complete_order, create_checkout
 from app.db import UPLOAD_DIR, get_session, init_db
 from app.models import Order, Product, Shop
@@ -70,6 +71,12 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # ---------- helpers ----------
+
+def _client_key(request: Request) -> str | None:
+    """Who to rate-limit. Behind Render's proxy this is only the visitor's IP
+    if uvicorn runs with --proxy-headers (VERIFY on deploy)."""
+    return request.client.host if request.client else None
+
 
 def _shop_or_404(session: Session, shop_id: str) -> Shop:
     shop = session.get(Shop, shop_id)
@@ -136,7 +143,7 @@ def get_shop(shop_id: str, session: Session = Depends(get_session)) -> ShopOut:
 
 @app.post("/api/shops/{shop_id}/products", status_code=201)
 async def upload_product_photo(
-    shop_id: str, file: UploadFile, session: Session = Depends(get_session)
+    shop_id: str, file: UploadFile, request: Request, session: Session = Depends(get_session)
 ) -> ProductOut:
     """One photo in, one AI-drafted product out. The frontend calls this once
     per photo, so each draft card can appear as soon as it's ready."""
@@ -158,7 +165,11 @@ async def upload_product_photo(
     dest.write_bytes(data)
 
     try:
-        listing = catalog_ai.generate_listing(dest)
+        # Sync SDK call: run it off the event loop so other requests aren't blocked.
+        listing = await run_in_threadpool(catalog_ai.generate_listing, dest, client_key=_client_key(request))
+    except ai_budget.AIBudgetExceeded as e:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(429, e.message) from e
     except Exception as e:  # AI or validation failure: don't leave an orphan file
         dest.unlink(missing_ok=True)
         raise HTTPException(502, f"Could not generate listing: {e}") from e
@@ -250,12 +261,15 @@ def checkout(body: CheckoutCreate, session: Session = Depends(get_session)) -> d
 
 
 @app.post("/api/agent/chat")
-def agent_chat(body: AgentChat, session: Session = Depends(get_session)) -> dict:
+def agent_chat(body: AgentChat, request: Request, session: Session = Depends(get_session)) -> dict:
     """One shopper-agent turn (screen 4). Send back the returned history next time."""
-    try:
-        return agent.chat(session, body.history, body.message.strip())
-    except NotImplementedError as e:  # AI_PROVIDER=anthropic before Tuesday's work
-        raise HTTPException(501, str(e)) from e
+    return agent.chat(session, body.history, body.message.strip(), client_key=_client_key(request))
+
+
+@app.get("/api/ai/usage")
+def ai_usage() -> dict:
+    """Today's estimated Claude spend vs. the limits (no secrets, no per-visitor data)."""
+    return {"provider": ai_provider.provider(), "model": ai_provider.model(), **ai_budget.status()}
 
 
 @app.get("/api/orders/{order_id}")

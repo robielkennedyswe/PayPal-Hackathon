@@ -17,7 +17,7 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlmodel import SQLModel  # noqa: E402
 
-from app import paypal  # noqa: E402
+from app import ai_budget, ai_provider, paypal  # noqa: E402
 from app.db import engine  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -41,3 +41,10 @@ def no_network(monkeypatch):
 
     for name in ("get_access_token", "create_order", "capture_order", "get_order"):
         monkeypatch.setattr(paypal, name, _blocked)
+
+    def _no_claude():
+        raise AssertionError("unexpected real Claude API call in tests")
+
+    monkeypatch.setattr(ai_provider, "client", _no_claude)
+    # Fresh per-visitor rate-limit windows per test.
+    ai_budget._client_calls.clear()
