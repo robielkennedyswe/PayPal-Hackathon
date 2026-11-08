@@ -31,7 +31,7 @@ from app.db import engine
 # Sent to the agent when it connects. This is where we state the payment
 # safety rule in words the model will follow.
 INSTRUCTIONS = """\
-ShopMCP lets you search and buy handmade goods from small independent shops.
+ShopMCP lets you search and buy products from small independent shops.
 
 Typical flow: search_products -> get_product -> create_checkout -> get_order_status.
 
@@ -40,6 +40,8 @@ Payment rules (important):
   the user so they can review and approve the payment in PayPal themselves.
 - Confirm the item, quantity and total with the user before creating a checkout.
 - Never tell the user an order is paid until get_order_status returns COMPLETED.
+- Payments run in PayPal's sandbox (test mode): the user approves with a
+  PayPal sandbox Personal account, ideally in a private/incognito window.
 """
 
 mcp = MCPServer(

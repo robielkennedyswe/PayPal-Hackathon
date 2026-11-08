@@ -94,6 +94,10 @@ def create_checkout(session: Session, product_id: str, qty: int = 1) -> dict:
         "status": order.status.value,
         "next_step": "Send approve_url to the buyer. They approve the payment in PayPal; "
                      "the agent cannot pay on their behalf.",
+        # Sandbox only (hard rule), so tell the agent how a tester approves.
+        # A logged-in PayPal developer session breaks the sandbox checkout page.
+        "sandbox_note": "PayPal sandbox (test) payment: open approve_url in a private/incognito "
+                        "window and log in with a PayPal sandbox Personal account.",
     }
 
 
