@@ -1823,22 +1823,6 @@ textarea.input {
   }
 }
 
-.home-shops {
-  margin-top: var(--space-12);
-}
-
-.section-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
-}
-
-.section-head h2 {
-  font-size: 22px;
-}
-
 .shop-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
