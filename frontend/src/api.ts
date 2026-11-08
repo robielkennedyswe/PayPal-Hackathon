@@ -1,7 +1,7 @@
 // Typed wrappers around the FastAPI routes. In dev, relative URLs go
 // through the Vite proxy to :8000. (Deploy: prefix with the backend URL.)
 
-import type { Product, ProductUpdate, Shop, Storefront } from './types'
+import type { AgentHistory, AgentReply, Product, ProductUpdate, Shop, Storefront } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -19,6 +19,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       const body = await res.json()
       if (typeof body.detail === 'string') message = body.detail
+      else if (typeof body.detail?.message === 'string') message = body.detail.message // {code, message}
       else if (Array.isArray(body.detail) && body.detail[0]?.msg) message = body.detail[0].msg
     } catch {
       /* non-JSON error body: keep the generic message */
@@ -55,4 +56,14 @@ export const api = {
   getStorefront: (slug: string) => request<Storefront>(`/api/storefront/${encodeURIComponent(slug)}`),
 
   publishShop: (shopId: string) => request<Shop>(`/api/shops/${shopId}/publish`, { method: 'POST' }),
+
+  health: () => request<{ ok: boolean; ai_provider: 'mock' | 'anthropic' }>('/api/health'),
+
+  agentChat: (history: AgentHistory, message: string) =>
+    request<AgentReply>('/api/agent/chat', json('POST', { history, message })),
+
+  getOrder: (orderId: string) =>
+    request<{ id: string; status: string; amount: string; paypal_capture_id: string | null }>(
+      `/api/orders/${encodeURIComponent(orderId)}`,
+    ),
 }

@@ -80,6 +80,9 @@ export function Storefront({ slug }: { slug: string }) {
             <p className="muted">
               You always approve the payment yourself in <strong>PayPal</strong>. The agent can never pay on its own.
             </p>
+            <Link href="/agent" className="btn btn-agent">
+              Try the built-in shopper agent
+            </Link>
           </aside>
         </div>
       </main>

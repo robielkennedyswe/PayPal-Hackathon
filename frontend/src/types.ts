@@ -45,3 +45,59 @@ export function normalizePrice(input: string): string | null {
   if (!m) return null
   return `${parseInt(m[1], 10)}.${(m[2] ?? '').padEnd(2, '0')}`
 }
+
+// ---- shopper agent (POST /api/agent/chat; backend/app/agent.py) ----
+
+/** Listing exactly as agents see it (get_product; same shape as agentView.ts). */
+export type AgentProduct = {
+  id: string
+  title: string
+  description: string
+  price: { value: string; currency: string }
+  stock: number
+  available: boolean
+  attributes: Record<string, string | number | boolean>
+  tags: string[]
+  shop: { name: string; slug: string }
+}
+
+export type AgentCheckout = {
+  order_id: string
+  approve_url: string
+  amount: string
+  currency: string
+  product_id: string
+  title: string
+  qty: number
+  status: string
+}
+
+export type AgentOrderStatus = {
+  order_id: string
+  status: 'CREATED' | 'APPROVED' | 'COMPLETED'
+  message: string
+  title: string | null
+  qty: number
+  amount: { value: string; currency: string }
+}
+
+export type ToolCall = {
+  id: string
+  name: string
+  input: Record<string, unknown>
+  output: unknown
+  is_error: boolean
+  duration_ms: number
+}
+
+export type AgentCard =
+  | { type: 'product'; product: AgentProduct; image_url: string | null }
+  | { type: 'approval'; checkout: AgentCheckout }
+  | { type: 'confirmation'; order: AgentOrderStatus }
+
+export type AgentTurn = { text: string; tool_calls: ToolCall[]; cards: AgentCard[] }
+
+/** Anthropic-format messages. Opaque to the UI: stored and sent back as-is. */
+export type AgentHistory = unknown[]
+
+export type AgentReply = { history: AgentHistory; turn: AgentTurn }

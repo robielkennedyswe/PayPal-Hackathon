@@ -22,6 +22,9 @@ export function Home() {
             <Link href="/sell" className="btn btn-primary">
               Start selling
             </Link>
+            <Link href="/agent" className="btn btn-agent">
+              Shop with an AI agent
+            </Link>
           </div>
         </section>
         <section className="how" aria-label="How it works">

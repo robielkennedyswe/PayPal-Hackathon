@@ -4,6 +4,7 @@ import { AddProducts } from './pages/AddProducts'
 import { CheckoutResult } from './pages/CheckoutResult'
 import { Home } from './pages/Home'
 import { Review } from './pages/Review'
+import { ShopperAgent } from './pages/ShopperAgent'
 import { Storefront } from './pages/Storefront'
 import { matchPath, useLocation } from './router'
 
@@ -22,6 +23,8 @@ export default function App() {
 
   const store = matchPath('/s/:slug', pathname)
   if (store) return <Storefront slug={store.slug} />
+
+  if (pathname === '/agent') return <ShopperAgent />
 
   if (pathname === '/checkout/result') return <CheckoutResult search={search} />
 
