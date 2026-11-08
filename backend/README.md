@@ -17,7 +17,7 @@ Activate the virtual environment with `source .venv/bin/activate` (and `deactiva
 ## Run
 
 ```bash
-.venv/bin/uvicorn app.main:app --reload --port 8000
+.venv/bin/uvicorn app.main:app --reload --port 8000 --timeout-graceful-shutdown 3
 ```
 
 - Interactive API docs: http://localhost:8000/docs

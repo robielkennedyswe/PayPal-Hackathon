@@ -62,7 +62,7 @@ cp .env.example .env        # then fill in Client_ID and Secret_Key (see below)
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/uvicorn app.main:app --reload --port 8000
+.venv/bin/uvicorn app.main:app --reload --port 8000 --timeout-graceful-shutdown 3
 
 # 3. Frontend (terminal 2)
 cd frontend
