@@ -20,6 +20,14 @@ Provider = Literal["mock", "anthropic"]
 _VALID: tuple[Provider, ...] = ("mock", "anthropic")
 
 
+def secret(name: str) -> str | None:
+    """Env secret with surrounding whitespace removed. A key pasted into a
+    hosting dashboard often picks up a trailing newline; in an HTTP header
+    that makes every request fail with a misleading "Connection error."."""
+    value = (os.getenv(name) or "").strip()
+    return value or None
+
+
 def provider() -> Provider:
     """Active provider from AI_PROVIDER (default "mock"). Unknown values fail loudly."""
     value = (os.getenv("AI_PROVIDER") or "mock").strip().lower()
@@ -28,7 +36,7 @@ def provider() -> Provider:
     if value == "anthropic":
         # Check config up front so a misconfigured deploy fails at the first
         # AI call with a clear message, not deep inside an SDK.
-        if not os.getenv("ANTHROPIC_API_KEY"):
+        if not secret("ANTHROPIC_API_KEY"):
             raise RuntimeError("AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set")
         if not os.getenv("AI_MODEL"):
             raise RuntimeError("AI_PROVIDER=anthropic but AI_MODEL is not set")
@@ -66,7 +74,7 @@ def client():
 
         # 60s timeout and 1 retry: a stuck call shouldn't hang the chat, and
         # each retry is a billed attempt.
-        _client = anthropic.Anthropic(timeout=60.0, max_retries=1)
+        _client = anthropic.Anthropic(api_key=secret("ANTHROPIC_API_KEY"), timeout=60.0, max_retries=1)
     return _client
 
 

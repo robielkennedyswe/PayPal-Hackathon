@@ -43,7 +43,9 @@ class PayPalError(RuntimeError):
 
 
 def _credentials() -> tuple[str, str]:
-    client_id, secret = os.getenv("Client_ID"), os.getenv("Secret_Key")
+    # strip(): a pasted secret with a trailing newline would break the request.
+    client_id = (os.getenv("Client_ID") or "").strip()
+    secret = (os.getenv("Secret_Key") or "").strip()
     if not client_id or not secret:
         raise RuntimeError("Client_ID / Secret_Key missing from environment (.env)")
     return client_id, secret

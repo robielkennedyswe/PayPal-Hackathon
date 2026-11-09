@@ -7,6 +7,7 @@ Interactive docs: http://localhost:8000/docs
 
 from __future__ import annotations
 
+import logging
 import re
 import secrets
 from contextlib import asynccontextmanager
@@ -39,6 +40,8 @@ from app.schemas import (
     ShopOut,
     StorefrontOut,
 )
+
+log = logging.getLogger(__name__)
 
 # Claude's API accepts images up to 10 MB base64-encoded (verified in the
 # vision docs); 5 MB raw (~6.7 MB as base64) stays safely under that.
@@ -221,6 +224,9 @@ async def upload_product_photo(
         dest.unlink(missing_ok=True)
         raise HTTPException(429, e.message) from e
     except Exception as e:  # AI or validation failure: don't leave an orphan file
+        # Log the type only: some SDK error causes embed request headers,
+        # i.e. the API key, in their message.
+        log.warning("listing generation failed: %s", type(e).__name__)
         dest.unlink(missing_ok=True)
         raise HTTPException(502, f"Could not generate listing: {e}") from e
 

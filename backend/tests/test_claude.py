@@ -236,3 +236,11 @@ def test_mock_mode_never_touches_the_budget(client):
     client.post("/api/agent/chat", json={"history": [], "message": "mug"})
     assert client.get("/api/ai/usage").json()["today"]["calls"] == 0
     assert catalog_ai  # imported for side-effect-free mock path
+
+
+def test_api_key_whitespace_is_stripped(monkeypatch):
+    """A key pasted with a trailing newline must not reach the HTTP header."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "  sk-ant-test-key\n")
+    assert ai_provider.secret("ANTHROPIC_API_KEY") == "sk-ant-test-key"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", " \n")
+    assert ai_provider.secret("ANTHROPIC_API_KEY") is None
