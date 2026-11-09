@@ -175,6 +175,19 @@ def health() -> dict:
     return {"ok": True, "ai_provider": ai_provider.provider()}
 
 
+# TEMPORARY (remove after checking): shows which client-IP forwarding headers
+# Render/Cloudflare actually send, so we know _client_key() picks the right one.
+# Echoes only the caller's own request.
+@app.get("/api/debug/client-ip")
+def debug_client_ip(request: Request) -> dict:
+    names = ["true-client-ip", "cf-connecting-ip", "x-forwarded-for", "x-real-ip", "forwarded"]
+    return {
+        "headers": {n: request.headers.get(n) for n in names},
+        "peer": request.client.host if request.client else None,
+        "client_key": _client_key(request),
+    }
+
+
 @app.post("/api/shops", status_code=201)
 def create_shop(body: ShopCreate, session: Session = Depends(get_session)) -> ShopOut:
     shop = Shop(
