@@ -119,11 +119,12 @@ def _client_key(request: Request) -> str | None:
     """Visitor id for the per-visitor AI rate limit.
 
     Behind Render's proxy the TCP peer is the proxy, so prefer forwarding
-    headers: True-Client-IP (set by Cloudflare in front of Render), then the
-    first X-Forwarded-For entry. These can be spoofed by a determined client,
-    which only lets them dodge this per-visitor limit: the daily and total
-    budgets in ai_budget.py are the hard caps. (Which header Render sends:
-    VERIFY after deploy.)
+    headers. Verified on Render (2026-11-09): Cloudflare sets True-Client-IP
+    to the real client IP and overwrites a client-sent value, while a spoofed
+    X-Forwarded-For entry is kept at the front of the list. So True-Client-IP
+    comes first; the first X-Forwarded-For entry is only a fallback (e.g.
+    without Cloudflare). Either way the daily and total budgets in
+    ai_budget.py are the hard caps.
     """
     forwarded = request.headers.get("true-client-ip") or request.headers.get("x-forwarded-for", "").split(",")[0]
     if forwarded.strip():
@@ -173,19 +174,6 @@ def _safe_filename(name: str) -> str:
 @app.get("/api/health")
 def health() -> dict:
     return {"ok": True, "ai_provider": ai_provider.provider()}
-
-
-# TEMPORARY (remove after checking): shows which client-IP forwarding headers
-# Render/Cloudflare actually send, so we know _client_key() picks the right one.
-# Echoes only the caller's own request.
-@app.get("/api/debug/client-ip")
-def debug_client_ip(request: Request) -> dict:
-    names = ["true-client-ip", "cf-connecting-ip", "x-forwarded-for", "x-real-ip", "forwarded"]
-    return {
-        "headers": {n: request.headers.get(n) for n in names},
-        "peer": request.client.host if request.client else None,
-        "client_key": _client_key(request),
-    }
 
 
 @app.post("/api/shops", status_code=201)
