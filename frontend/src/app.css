@@ -413,16 +413,6 @@ textarea.input {
   background: var(--seller-soft);
 }
 
-.camera-btn {
-  width: 100%;
-  margin-top: var(--space-3);
-  justify-content: center;
-}
-
-.camera-btn[aria-disabled='true'] {
-  opacity: 0.6;
-}
-
 .dropzone[aria-disabled='true'] {
   cursor: not-allowed;
   opacity: 0.6;

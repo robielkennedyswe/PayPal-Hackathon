@@ -21,8 +21,9 @@ type Draft = {
 
 const ACCEPT = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const MAX_BYTES = 5 * 1024 * 1024 // matches the backend cap
-// Phones and tablets: offer the camera and use "tap" wording. (The normal
-// picker already offers the camera too, but nothing on screen said so.)
+// Phones and tablets: "tap" wording that mentions the camera. The normal
+// picker already offers Take Photo / library / files on iOS and Android
+// (tested on an iPhone), so no separate camera button is needed.
 const TOUCH = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
 const CONCURRENCY = 3 // parallel uploads; keeps the real AI API under rate limits later
 
@@ -38,7 +39,6 @@ export function AddProducts({ shopId }: { shopId?: string }) {
 
   // Refs hold values that async upload callbacks need without re-rendering.
   const inputRef = useRef<HTMLInputElement>(null)
-  const cameraRef = useRef<HTMLInputElement>(null) // capture="environment": opens the rear camera on phones
   const shopRef = useRef<Shop | null>(null)
   const creating = useRef<Promise<Shop> | null>(null)
   const queue = useRef<{ key: string; file: File }[]>([])
@@ -173,7 +173,6 @@ export function AddProducts({ shopId }: { shopId?: string }) {
 
   // ---- drop zone handlers ----
   const openPicker = () => (formReady ? inputRef.current?.click() : setTouched(true))
-  const openCamera = () => (formReady ? cameraRef.current?.click() : setTouched(true))
   const onDrop = (e: DragEvent) => {
     e.preventDefault()
     setDragging(false)
@@ -306,29 +305,6 @@ export function AddProducts({ shopId }: { shopId?: string }) {
                 }}
               />
             </div>
-            {TOUCH && (
-              <>
-                <button
-                  type="button"
-                  className="btn camera-btn"
-                  onClick={openCamera}
-                  aria-disabled={!formReady}
-                >
-                  📷 Take a photo
-                </button>
-                <input
-                  ref={cameraRef}
-                  type="file"
-                  accept={ACCEPT.join(',')}
-                  capture="environment"
-                  hidden
-                  onChange={(e) => {
-                    addFiles(Array.from(e.target.files ?? []))
-                    e.target.value = ''
-                  }}
-                />
-              </>
-            )}
 
             {drafts.length > 0 && (
               <div className="drafts" aria-live="polite">

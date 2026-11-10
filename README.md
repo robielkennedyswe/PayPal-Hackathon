@@ -50,7 +50,7 @@ The MCP endpoint is **`https://shopmcp.onrender.com/mcp`** (streamable HTTP, no 
 
 ### 3. Be the seller
 
-1. Open **[/sell](https://shopmcp.onrender.com/sell)**, enter a shop name and a PayPal sandbox **business** email, and drop in a few product photos (on a phone, tap **Take a photo** to use the camera). Each one becomes an AI-drafted listing in a few seconds.
+1. Open **[/sell](https://shopmcp.onrender.com/sell)**, enter a shop name and a PayPal sandbox **business** email, and drop in a few product photos (on a phone, tap the photo area to take a picture with the camera). Each one becomes an AI-drafted listing in a few seconds.
    <!-- TODO: which payee email judges should use (decide later) -->
 2. **Review & publish:** edit title, description, price, stock and tags. The side panel shows the exact JSON an agent will receive. **Publish shop** puts it live on its storefront and to AI agents; after that, edits go live when you click **Save changes**.
 3. **Dashboard:** your MCP endpoint, sales stats, a live feed of what agents do (search → view → checkout → approved → **Sold via AI agent**), and inventory. Only the seller can open it (see [Security](#security)).
