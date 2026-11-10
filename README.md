@@ -57,23 +57,124 @@ The MCP endpoint is **`https://shopmcp.onrender.com/mcp`** (streamable HTTP, no 
 
 The hosted site has a small shared AI budget. If listing generation says the daily limit is reached, try the other two flows.
 
-## How it works
+## Architecture
 
-```
-Seller                          ShopMCP (FastAPI)                         PayPal sandbox
-──────                          ─────────────────                         ──────────────
-photos ───────────────────────▶ Claude vision → listing JSON
-review, publish ──────────────▶ storefront /s/<slug> + MCP tools
+ShopMCP is **one web service**: a FastAPI app that serves the React frontend, the REST API and the MCP server from the same origin, with SQLite and product photos on a persistent disk. Claude and PayPal are the only external services.
 
-AI agent (MCP or built-in) ───▶ search_products / get_product
-                                create_checkout ─────────────────────────▶ create order (payee = seller)
-buyer ◀──────── approve_url ◀──────────────────────────────────────────── payer-action link
-buyer approves in PayPal ────────────────────────────────────────────────▶
-                                /paypal/return ◀──────────────────────── redirect
-                                capture, decrement stock ───────────────▶ COMPLETED
-agent ────────────────────────▶ get_order_status → "Paid"
-seller dashboard ◀───────────── live activity feed
+### System overview
+
+```mermaid
+flowchart LR
+  subgraph clients["Clients"]
+    seller["Seller<br/>(browser)"]
+    shopper["Shopper<br/>(browser)"]
+    agents["External AI agents<br/>Claude · ChatGPT · Gemini CLI · Cursor"]
+  end
+
+  subgraph render["Render: one Docker web service behind Cloudflare"]
+    spa["React app<br/>seller screens · storefronts · shopper agent"]
+    api["REST API<br/>/api/* · seller routes need X-Seller-Token"]
+    mcp["MCP server<br/>/mcp · streamable HTTP"]
+    agent["Built-in shopper agent<br/>agent.py"]
+    tools["Shared tool layer<br/>tools.py<br/>search · get · checkout · status"]
+    catalog["Listing generator<br/>catalog_ai.py"]
+    gateway["AI gateway<br/>ai_provider.py + ai_budget.py<br/>budgets · cache · mock switch"]
+    checkout["Checkout<br/>checkout.py<br/>stock checks · capture · idempotency"]
+    ppclient["PayPal client<br/>paypal.py · sandbox only"]
+    db[("SQLite + photos<br/>persistent disk")]
+  end
+
+  claude["Claude API"]
+  paypal["PayPal Orders v2<br/>sandbox"]
+
+  seller --> spa
+  shopper --> spa
+  spa --> api
+  agents -- MCP --> mcp
+  api --> catalog
+  api --> agent
+  mcp --> tools
+  agent --> tools
+  tools --> checkout
+  catalog --> gateway
+  agent --> gateway
+  gateway --> claude
+  checkout --> ppclient
+  ppclient --> paypal
+  paypal -. return / cancel redirect .-> api
+  api --> db
+  tools --> db
+  checkout --> db
 ```
+
+### Buying through an AI agent
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Buyer
+  participant Agent as AI agent (any MCP client or built-in)
+  participant S as ShopMCP
+  participant PP as PayPal (sandbox)
+  participant Dash as Seller dashboard
+
+  Buyer->>Agent: Find me a climbing rope under $50
+  Agent->>S: search_products, get_product
+  S-->>Agent: Listings with price, stock, photo link
+  Agent->>Buyer: Confirm item, quantity and total?
+  Buyer->>Agent: Yes
+  Agent->>S: create_checkout(product_id, qty)
+  S->>PP: Create order (intent CAPTURE, payee = seller)
+  PP-->>S: Approval link
+  S-->>Agent: order_id + approve_url
+  Agent->>Buyer: Approve the payment in PayPal
+  Buyer->>PP: Log in and approve
+  PP->>S: Redirect to /paypal/return
+  S->>S: Re-check stock
+  S->>PP: Capture
+  PP-->>S: COMPLETED
+  S->>Dash: Sold via AI agent (live feed)
+  Agent->>S: get_order_status
+  S-->>Agent: COMPLETED
+  Agent->>Buyer: Paid, order confirmed
+```
+
+The agent never touches money: it only receives an approval link, and the server captures the payment after the buyer approves in PayPal.
+
+### Listing a product
+
+```mermaid
+sequenceDiagram
+  actor Seller
+  participant S as ShopMCP
+  participant C as Claude API
+
+  Seller->>S: Create shop (name, PayPal sandbox email)
+  S-->>Seller: Seller token, kept in this browser
+  Seller->>S: Upload a photo
+  alt Same photo seen before
+    S->>S: Reuse cached listing (photo SHA-256)
+  else New photo, within AI budget
+    S->>C: Photo + strict JSON schema
+    C-->>S: Title, description, attributes, tags, suggested price
+  end
+  S-->>Seller: Draft listing card
+  Seller->>S: Review, edit, Publish shop
+  S-->>Seller: Live storefront, visible to every agent, dashboard
+```
+
+### Design decisions
+
+| Decision | Why |
+|---|---|
+| One service for frontend, API and MCP | One deploy, one disk, same origin (no CORS), nothing to keep in sync |
+| One shared tool layer (`tools.py`) | The built-in agent and every external MCP client run the same code, so payment rules live in one place |
+| Server-side capture, with `get_order_status` as a fallback | Agents can't move money; a missed return redirect still settles |
+| SQLite on a persistent disk | Tiny catalogs, zero ops, survives redeploys |
+| Seller tokens instead of accounts | No sign-up friction for small sellers; public shop ids can't be used to edit a shop |
+| AI gateway with budgets and a photo cache | Hard cost cap on a public demo; the same photo is never paid for twice |
+| Stateless MCP over streamable HTTP | No sessions to pin, works behind Cloudflare and with any MCP client |
+| Mock AI provider | Development and tests run with no API cost; never used in the demo |
 
 ### Payment safety
 
