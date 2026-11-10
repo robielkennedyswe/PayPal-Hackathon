@@ -25,7 +25,7 @@ export function TopBar() {
       active: pathname.endsWith('/dashboard'),
       title: shopId ? undefined : 'Create a shop first',
     },
-    { label: 'Try the shopper agent', href: '/agent', active: pathname === '/agent' },
+    { label: 'Try the shopper agent', short: 'Shopper agent', href: '/agent', active: pathname === '/agent' },
   ]
 
   return (
@@ -44,7 +44,14 @@ export function TopBar() {
               className={n.active ? 'active' : ''}
               aria-current={n.active ? 'page' : undefined}
             >
-              {n.label}
+              {'short' in n ? (
+                <>
+                  <span className="nav-long">{n.label}</span>
+                  <span className="nav-short">{n.short}</span>
+                </>
+              ) : (
+                n.label
+              )}
             </Link>
           ))}
         </nav>

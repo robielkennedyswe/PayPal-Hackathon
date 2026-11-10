@@ -1523,7 +1523,9 @@ textarea.input {
 
 @media (max-width: 900px) {
   .dash-grid {
-    grid-template-columns: 1fr;
+    /* minmax(0, …), not 1fr: a plain 1fr column can't shrink below its widest
+       child (the nowrap MCP command), which pushed the cards off-screen on phones. */
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1950,6 +1952,10 @@ textarea.input {
   white-space: nowrap;
 }
 
+.nav-short {
+  display: none;
+}
+
 /* Narrow screens: nav drops to its own scrollable row under the brand. */
 @media (max-width: 760px) {
   .topbar-inner {
@@ -1962,6 +1968,16 @@ textarea.input {
     justify-content: flex-start;
     overflow-x: auto;
     white-space: nowrap;
+  }
+}
+
+/* Phones: "Try the shopper agent" → "Shopper agent" so all four links fit. */
+@media (max-width: 480px) {
+  .nav-long {
+    display: none;
+  }
+  .nav-short {
+    display: inline;
   }
 }
 
