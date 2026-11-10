@@ -21,7 +21,7 @@ export function Dashboard({ shopId }: { shopId: string }) {
   const [fresh, setFresh] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [, setTick] = useState(0) // re-render so "2m ago" stays current
-  const myShops = useMyShops()
+  const myShops = useMyShops().filter((s) => s.token) // shops this browser can manage
   const lastId = useRef(0)
 
   useEffect(() => {
@@ -118,7 +118,7 @@ export function Dashboard({ shopId }: { shopId: string }) {
             <p>Seller dashboard · updates live</p>
             {myShops.length > 1 && (
               <label className="shop-switch">
-                <span>Your shops</span>
+                <span>Shops you manage</span>
                 <select
                   className="input"
                   value={shop.id}
@@ -171,80 +171,84 @@ export function Dashboard({ shopId }: { shopId: string }) {
           <Stat label="Revenue" value={`$${formatMoney(stats.revenue)}`} hint="captured in PayPal (sandbox)" />
         </section>
 
+        {/* Left: what's happening (activity, then inventory). Right: how to connect.
+            On phones the columns stack, so Connect ends up at the bottom. */}
         <div className="dash-grid">
-          <section className="card card-pad feed" aria-label="Live activity">
-            <div className="feed-head">
-              <h2>Live activity</h2>
-              <span className="live-dot" aria-hidden="true" /> <span className="muted feed-live">Live</span>
-            </div>
-            {events.length === 0 ? (
-              <div className="feed-empty">
-                <p className="muted">No agent activity yet.</p>
-                <p className="muted">
-                  Try it: open the <Link href="/agent">built-in shopper agent</Link> and ask for one of your products.
-                  Its searches and purchases show up here within seconds.
-                </p>
+          <div className="dash-main">
+            <section className="card card-pad feed" aria-label="Live activity">
+              <div className="feed-head">
+                <h2>Live activity</h2>
+                <span className="live-dot" aria-hidden="true" /> <span className="muted feed-live">Live</span>
               </div>
-            ) : (
-              <ol className="feed-list">
-                {events.map((e) => (
-                  <FeedItem key={e.id} event={e} fresh={fresh.has(e.id)} />
-                ))}
-              </ol>
-            )}
+              {events.length === 0 ? (
+                <div className="feed-empty">
+                  <p className="muted">No agent activity yet.</p>
+                  <p className="muted">
+                    Try it: open the <Link href="/agent">built-in shopper agent</Link> and ask for one of your products.
+                    Its searches and purchases show up here within seconds.
+                  </p>
+                </div>
+              ) : (
+                <ol className="feed-list">
+                  {events.map((e) => (
+                    <FeedItem key={e.id} event={e} fresh={fresh.has(e.id)} />
+                  ))}
+                </ol>
+              )}
+            </section>
+
+          <section className="card inventory" aria-label="Inventory">
+            <div className="inventory-head">
+              <h2>Inventory</h2>
+              <Link href={`/sell/${shop.id}/review`} className="btn btn-sm">
+                Edit prices &amp; stock
+              </Link>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Product</th>
+                    <th scope="col" className="num">
+                      Price
+                    </th>
+                    <th scope="col" className="num">
+                      In stock
+                    </th>
+                    <th scope="col" className="num">
+                      Sold
+                    </th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shop.products.map((p) => {
+                    const status = !shop.published ? 'draft' : p.stock <= 0 ? 'out' : p.stock <= 2 ? 'low' : 'live'
+                    return (
+                      <tr key={p.id}>
+                        <td>
+                          <div className="inv-product">
+                            {p.image_url ? <img src={p.image_url} alt="" /> : <span className="inv-noimg" />}
+                            <span>{p.title}</span>
+                          </div>
+                        </td>
+                        <td className="num">${p.price}</td>
+                        <td className="num">{p.stock}</td>
+                        <td className="num">{data.units_sold[p.id] ?? 0}</td>
+                        <td>
+                          <span className={`inv-status ${status}`}>{STATUS_LABEL[status]}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </section>
+          </div>
 
           <ConnectCard mcpUrl={data.mcp_url} />
         </div>
-
-        <section className="card inventory" aria-label="Inventory">
-          <div className="inventory-head">
-            <h2>Inventory</h2>
-            <Link href={`/sell/${shop.id}/review`} className="btn btn-sm">
-              Edit prices &amp; stock
-            </Link>
-          </div>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Product</th>
-                  <th scope="col" className="num">
-                    Price
-                  </th>
-                  <th scope="col" className="num">
-                    In stock
-                  </th>
-                  <th scope="col" className="num">
-                    Sold
-                  </th>
-                  <th scope="col">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shop.products.map((p) => {
-                  const status = !shop.published ? 'draft' : p.stock <= 0 ? 'out' : p.stock <= 2 ? 'low' : 'live'
-                  return (
-                    <tr key={p.id}>
-                      <td>
-                        <div className="inv-product">
-                          {p.image_url ? <img src={p.image_url} alt="" /> : <span className="inv-noimg" />}
-                          <span>{p.title}</span>
-                        </div>
-                      </td>
-                      <td className="num">${p.price}</td>
-                      <td className="num">{p.stock}</td>
-                      <td className="num">{data.units_sold[p.id] ?? 0}</td>
-                      <td>
-                        <span className={`inv-status ${status}`}>{STATUS_LABEL[status]}</span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
       </main>
     </>
   )
@@ -271,7 +275,10 @@ function LiveBanner({ mcpUrl }: { mcpUrl: string }) {
         <span className="live-pill">
           <span className="live-dot" aria-hidden="true" /> Live to AI agents
         </span>
-        <p>Any MCP-compatible AI agent can search your products and start a PayPal checkout at:</p>
+        <p>
+          Works with any MCP client: Claude, ChatGPT, Gemini CLI, Cursor and more. Agents search your products and
+          start a PayPal checkout at:
+        </p>
       </div>
       <CopyField value={mcpUrl} label="MCP endpoint" />
     </section>
@@ -283,21 +290,36 @@ function ConnectCard({ mcpUrl }: { mcpUrl: string }) {
   return (
     <aside className="card card-pad connect" aria-label="Connect an AI agent">
       <h2>Connect any AI agent</h2>
+      {isLocal && (
+        <p className="muted connect-local">
+          Web apps (claude.ai, ChatGPT) need the public, deployed URL; localhost only works for local clients.
+        </p>
+      )}
       <ol className="connect-steps">
+        <li>
+          <strong>Claude (claude.ai or Desktop)</strong>
+          <span className="muted">Customize → Connectors → Add custom connector, then paste the MCP endpoint.</span>
+        </li>
+        <li>
+          <strong>ChatGPT</strong>
+          <span className="muted">
+            Paid plans, on the web: Settings → Apps &amp; Connectors → Advanced → turn on Developer mode, then create a
+            connector with the MCP endpoint and No authentication.
+          </span>
+        </li>
         <li>
           <strong>Claude Code</strong>
           <CopyField value={`claude mcp add --transport http shopmcp ${mcpUrl}`} label="Claude Code command" />
         </li>
         <li>
-          <strong>Claude Desktop or claude.ai</strong>
-          <span className="muted">
-            Customize → Connectors → Add custom connector, then paste the MCP endpoint.
-            {isLocal && ' Needs the public (deployed) URL; localhost only works for local clients.'}
-          </span>
+          <strong>Gemini CLI</strong>
+          <CopyField value={`gemini mcp add --transport http shopmcp ${mcpUrl}`} label="Gemini CLI command" />
         </li>
         <li>
           <strong>Any other MCP client</strong>
-          <span className="muted">Add a remote server with streamable HTTP transport and the endpoint above.</span>
+          <span className="muted">
+            Cursor, VS Code and others: add a remote server (streamable HTTP) with the endpoint above.
+          </span>
         </li>
         <li>
           <strong>No setup</strong>

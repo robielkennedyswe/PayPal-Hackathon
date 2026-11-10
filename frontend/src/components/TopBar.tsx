@@ -2,12 +2,16 @@ import { useMyShops } from '../myShops'
 import { matchPath, useLocation } from '../router'
 import { Link } from './Link'
 
+type NavItem = { label: string; short?: string; href: string; active: boolean }
+
 /** Site header (matches the Claude Design top bar): brand, main nav with the
  * current section underlined, and a "PayPal sandbox" badge so nobody mistakes
  * test payments for real ones. */
+
 export function TopBar() {
   const { pathname } = useLocation()
-  const myShops = useMyShops()
+  // Only shops this browser can manage (has a seller token for) count as "yours".
+  const myShops = useMyShops().filter((s) => s.token)
 
   // "Your shop": the one in the URL if we're on a seller page, else the most recent.
   const urlShop = (matchPath('/sell/:shopId', pathname) ??
@@ -16,15 +20,16 @@ export function TopBar() {
   const shopId = urlShop ?? myShops[0]?.id
 
   const onSetup = pathname === '/sell' || (pathname.startsWith('/sell/') && !pathname.endsWith('/dashboard'))
-  const nav = [
+  // Shoppers see "Start selling"; sellers (a shop in this browser) get setup + dashboard.
+  const sellerLinks: NavItem[] = shopId
+    ? [
+        { label: 'Shop setup', href: `/sell/${shopId}`, active: onSetup },
+        { label: 'Dashboard', href: `/sell/${shopId}/dashboard`, active: pathname.endsWith('/dashboard') },
+      ]
+    : [{ label: 'Start selling', href: '/sell', active: pathname.startsWith('/sell') }]
+  const nav: NavItem[] = [
     { label: 'Shops', href: '/shops', active: pathname === '/shops' || pathname.startsWith('/s/') },
-    { label: 'Shop setup', href: shopId ? `/sell/${shopId}` : '/sell', active: onSetup },
-    {
-      label: 'Dashboard',
-      href: shopId ? `/sell/${shopId}/dashboard` : '/sell',
-      active: pathname.endsWith('/dashboard'),
-      title: shopId ? undefined : 'Create a shop first',
-    },
+    ...sellerLinks,
     { label: 'Try the shopper agent', short: 'Shopper agent', href: '/agent', active: pathname === '/agent' },
   ]
 
@@ -40,11 +45,10 @@ export function TopBar() {
             <Link
               key={n.label}
               href={n.href}
-              title={n.title}
               className={n.active ? 'active' : ''}
               aria-current={n.active ? 'page' : undefined}
             >
-              {'short' in n ? (
+              {n.short ? (
                 <>
                   <span className="nav-long">{n.label}</span>
                   <span className="nav-short">{n.short}</span>

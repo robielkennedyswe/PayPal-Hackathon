@@ -216,7 +216,7 @@ export function Review({ shopId }: { shopId: string }) {
               Check each AI draft for <strong>{shop.name}</strong>.{' '}
               {shop.published
                 ? 'Edits go live to AI agents when you click Save changes.'
-                : 'Changes save when you leave a field.'}
+                : 'Changes save when you leave a field. Publishing puts your shop live on its storefront and to AI agents.'}
             </p>
           </div>
           <div className="head-actions">
@@ -243,7 +243,7 @@ export function Review({ shopId }: { shopId: string }) {
                     : 'All changes saved ✓'
                 : publishing
                   ? 'Publishing…'
-                  : 'Publish to AI agents'}
+                  : 'Publish shop'}
             </button>
           </div>
         </div>
