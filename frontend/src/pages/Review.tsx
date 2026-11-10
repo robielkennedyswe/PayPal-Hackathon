@@ -66,6 +66,7 @@ export function Review({ shopId }: { shopId: string }) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
+  const [savedNotice, setSavedNotice] = useState(false) // "changes are live" after Save changes
 
   useEffect(() => {
     let cancelled = false
@@ -91,8 +92,11 @@ export function Review({ shopId }: { shopId: string }) {
   )
   const anyInvalid = Object.values(errors).some((e) => Object.keys(e).length > 0)
 
-  const setField = (id: string, field: Field, value: string) =>
+  const setField = (id: string, field: Field, value: string) => {
+    setSavedNotice(false)
+    setSaveState((s) => ({ ...s, [id]: 'idle' })) // "Saved" would be stale until the next save
     setForms((fs) => ({ ...fs, [id]: { ...fs[id], [field]: value } }))
+  }
 
   /** PATCH whatever changed for one product. Returns false on failure. */
   async function save(id: string): Promise<boolean> {
@@ -132,8 +136,12 @@ export function Review({ shopId }: { shopId: string }) {
   async function publish() {
     setPublishing(true)
     setPublishError(null)
+    setSavedNotice(false)
     const results = await Promise.all(products.map((p) => save(p.id)))
-    if (results.every(Boolean)) {
+    if (results.every(Boolean) && shop?.published) {
+      // Already live: edits go live as they save, so just confirm it.
+      setSavedNotice(true)
+    } else if (results.every(Boolean)) {
       try {
         await api.publishShop(shopId)
         navigate(`/sell/${shopId}/dashboard`) // step 3: go live
@@ -198,9 +206,17 @@ export function Review({ shopId }: { shopId: string }) {
               // Not disabled while a field is saving: clicking Publish blurs the
               // field, which starts a save, and a button that disables itself
               // mid-click swallows the click. publish() saves pending edits itself.
-              disabled={shop.published || publishing || anyInvalid || products.length === 0}
+              // Once published it stays usable as "Save changes" (it used to be a
+              // disabled "Published ✓", which looked like edits couldn't go live).
+              disabled={publishing || anyInvalid || products.length === 0}
             >
-              {shop.published ? 'Published ✓' : publishing ? 'Publishing…' : 'Publish to AI agents'}
+              {shop.published
+                ? publishing
+                  ? 'Saving…'
+                  : 'Save changes'
+                : publishing
+                  ? 'Publishing…'
+                  : 'Publish to AI agents'}
             </button>
           </div>
         </div>
@@ -216,9 +232,18 @@ export function Review({ shopId }: { shopId: string }) {
             </Link>
           </div>
         )}
+        {savedNotice && (
+          <div className="banner banner-success" role="status">
+            All changes saved. AI agents now see your latest listings.
+          </div>
+        )}
         {publishError && <div className="banner banner-error">{publishError}</div>}
-        {anyInvalid && !shop.published && (
-          <div className="banner banner-error">Fix the highlighted fields before publishing.</div>
+        {anyInvalid && (
+          <div className="banner banner-error">
+            {shop.published
+              ? "Fix the highlighted fields. Those changes aren't live until they're valid."
+              : 'Fix the highlighted fields before publishing.'}
+          </div>
         )}
 
         {products.length === 0 ? (
