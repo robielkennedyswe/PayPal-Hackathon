@@ -41,7 +41,7 @@ The MCP endpoint is **`https://shopmcp.onrender.com/mcp`** (streamable HTTP, no 
   ```
   Then ask Claude Code to find and buy something.
 - **claude.ai or Claude Desktop:** **Customize → Connectors → Add custom connector**, paste the endpoint URL, and leave authentication empty. ([Anthropic's guide](https://claude.com/docs/connectors/custom/remote-mcp))
-- **ChatGPT** (paid plans, web): **Settings → Apps & Connectors → Advanced → Developer mode**, then create a connector with the endpoint URL and **No authentication**. ([OpenAI's guide](https://developers.openai.com/api/docs/guides/developer-mode))
+- **ChatGPT** (Plus or higher, on the web): **Plugins → Add → Add custom MCP server**, paste the endpoint as the **Server URL**, set **Authentication** to **No authentication**, and confirm. Then turn on ShopMCP in a chat. Tested: ChatGPT found, checked out and confirmed a purchase.
 - **Gemini CLI:**
   ```bash
   gemini mcp add --transport http shopmcp https://shopmcp.onrender.com/mcp

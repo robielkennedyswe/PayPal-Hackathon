@@ -303,8 +303,8 @@ function ConnectCard({ mcpUrl }: { mcpUrl: string }) {
         <li>
           <strong>ChatGPT</strong>
           <span className="muted">
-            Paid plans, on the web: Settings → Apps &amp; Connectors → Advanced → turn on Developer mode, then create a
-            connector with the MCP endpoint and No authentication.
+            Plus or higher, on the web: Plugins → Add → Add custom MCP server. Paste the MCP endpoint as the Server URL
+            and set Authentication to No authentication.
           </span>
         </li>
         <li>
