@@ -291,7 +291,7 @@ function ConnectCard({ mcpUrl }: { mcpUrl: string }) {
         <li>
           <strong>Claude Desktop or claude.ai</strong>
           <span className="muted">
-            Settings → Connectors → Add custom connector, then paste the MCP endpoint.
+            Customize → Connectors → Add custom connector, then paste the MCP endpoint.
             {isLocal && ' Needs the public (deployed) URL; localhost only works for local clients.'}
           </span>
         </li>
