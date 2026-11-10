@@ -20,7 +20,7 @@ from decimal import Decimal, InvalidOperation
 
 from sqlmodel import Session, select
 
-from app import activity, checkout, paypal
+from app import activity, checkout, config, paypal
 from app.checkout import CheckoutError, Outcome
 from app.models import Order, OrderStatus, Product, Shop
 
@@ -94,15 +94,29 @@ def _score(product: Product, words: set[str]) -> int:
     return sum(3 * (w in title) + 2 * (w in tags) + (w in rest) for w in words)
 
 
+# Agents (ChatGPT, Claude, ...) can only show what the tools give them, so
+# photos and the storefront are full https links, not app-relative paths.
+SHIPPING_AND_TAX = "Included: the PayPal total is price × quantity, with no shipping or tax added."
+
+
+def _image_url(p: Product) -> str | None:
+    return f"{config.APP_BASE_URL}/uploads/{p.image_path}" if p.image_path else None
+
+
+def _shop_info(s: Shop) -> dict:
+    return {"name": s.name, "slug": s.slug, "url": f"{config.FRONTEND_URL}/s/{s.slug}"}
+
+
 def _summary(p: Product, s: Shop) -> dict:
     return {
         "id": p.id,
         "title": p.title,
         "price": {"value": p.price, "currency": checkout.CURRENCY},
-        "shop": {"name": s.name, "slug": s.slug},
+        "shop": _shop_info(s),
         "short_description": _shorten(p.description),
         "stock": p.stock,
         "available": p.stock > 0,
+        "image_url": _image_url(p),
     }
 
 
@@ -125,11 +139,13 @@ def get_product(session: Session, product_id: str) -> dict:
         "title": product.title,
         "description": product.description,
         "price": {"value": product.price, "currency": checkout.CURRENCY},
+        "shipping_and_tax": SHIPPING_AND_TAX,
         "stock": product.stock,
         "available": product.stock > 0,
         "attributes": product.attributes,
         "tags": product.tags,
-        "shop": {"name": shop.name, "slug": shop.slug},
+        "image_url": _image_url(product),
+        "shop": _shop_info(shop),
         "checkout": "Call create_checkout; the buyer approves payment in PayPal.",
     }
     activity.record(session, shop_id=shop.id, kind="view", product_id=product.id, detail={"title": product.title})

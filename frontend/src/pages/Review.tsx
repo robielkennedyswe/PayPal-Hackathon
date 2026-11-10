@@ -330,6 +330,7 @@ export function Review({ shopId }: { shopId: string }) {
                         stock: Number(selForm.stock) || 0,
                         tags: parseTags(selForm.tags),
                         attributes: sel.attributes,
+                        image_url: sel.image_url,
                       },
                       shop,
                     ),

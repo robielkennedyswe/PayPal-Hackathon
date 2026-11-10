@@ -1,10 +1,12 @@
 """MCP tools: the shared functions (tools.py) and the real protocol over /mcp."""
 
 import json
+import re
+from pathlib import Path
 
 from sqlmodel import Session
 
-from app import paypal, tools
+from app import config, paypal, tools
 from app.db import engine
 from test_api import captured, fake_create, make_shop, upload
 
@@ -61,15 +63,35 @@ def test_unpublished_shops_are_invisible(client):
             assert e.code == "PRODUCT_NOT_FOUND"
 
 
+AGENT_VIEW = Path(__file__).resolve().parents[2] / "frontend" / "src" / "agentView.ts"
+
+
 def test_get_product_matches_agent_view_shape(client):
-    """frontend/src/agentView.ts shows sellers this exact shape."""
+    """frontend/src/agentView.ts shows sellers this exact shape: same keys, same order."""
     shop, ids = published_shop(client, ("blue_mug.jpg",))
     with Session(engine) as s:
         p = tools.get_product(s, ids["mug"])
-    assert list(p) == ["id", "title", "description", "price", "stock", "available",
-                       "attributes", "tags", "shop", "checkout"]
+    # Top-level keys of the object agentView() returns (4-space indented "key:" lines).
+    frontend_keys = re.findall(r"^    (\w+):", AGENT_VIEW.read_text(), flags=re.M)
+    assert list(p) == frontend_keys
+    assert list(p) == ["id", "title", "description", "price", "shipping_and_tax", "stock", "available",
+                       "attributes", "tags", "image_url", "shop", "checkout"]
     assert p["price"] == {"value": "34.00", "currency": "USD"}
-    assert p["shop"] == {"name": shop["name"], "slug": shop["slug"]}
+    assert "no shipping or tax" in p["shipping_and_tax"]
+    assert p["shop"] == {"name": shop["name"], "slug": shop["slug"], "url": f"{config.FRONTEND_URL}/s/{shop['slug']}"}
+
+
+def test_agents_get_working_photo_links(client):
+    """External agents (ChatGPT, Claude) can only show photos they get a full URL for."""
+    _, ids = published_shop(client, ("blue_mug.jpg",))
+    with Session(engine) as s:
+        found = tools.search_products(s, "mug")[0]
+        full = tools.get_product(s, ids["mug"])
+    assert found["image_url"] == full["image_url"]
+    assert full["image_url"].startswith(f"{config.APP_BASE_URL}/uploads/")
+    r = client.get(full["image_url"].removeprefix(config.APP_BASE_URL))  # the link actually serves the photo
+    assert r.status_code == 200 and r.content
+    assert found["shop"]["url"].endswith(f"/s/{found['shop']['slug']}")
 
 
 def test_order_status_captures_if_return_url_was_missed(client, monkeypatch):

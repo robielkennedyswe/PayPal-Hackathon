@@ -89,8 +89,8 @@ The built-in shopper agent calls the same four Python functions as the MCP serve
 
 | Tool | Input | Returns |
 |---|---|---|
-| `search_products` | `query`, optional `max_price` (USD) | Up to 10 matches across all published shops, best first: id, title, price, shop, short description, stock |
-| `get_product` | `product_id` | The full listing: description, attributes, tags, price, stock, availability, shop |
+| `search_products` | `query`, optional `max_price` (USD) | Up to 10 matches across all published shops, best first: id, title, price, shop (with storefront link), short description, stock, photo link |
+| `get_product` | `product_id` | The full listing: description, attributes, tags, price (shipping and tax included), stock, photo link, shop and storefront link |
 | `create_checkout` | `product_id`, `qty` (1–10) | `order_id`, `approve_url`, total. Creates a PayPal order with the seller as payee |
 | `get_order_status` | `order_id` | `CREATED` / `APPROVED` / `COMPLETED` with a plain-language message (captures if the return redirect was missed) |
 

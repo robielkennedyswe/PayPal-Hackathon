@@ -38,6 +38,8 @@ Payment rules (important):
 - You cannot pay. create_checkout returns an approve_url; give that link to
   the user so they can review and approve the payment in PayPal themselves.
 - Confirm the item, quantity and total with the user before creating a checkout.
+- Prices are final: the PayPal total is price × quantity, with no shipping
+  or tax added.
 - Never tell the user an order is paid until get_order_status returns COMPLETED.
 - Payments run in PayPal's sandbox (test mode): the user approves with a
   PayPal sandbox Personal account, ideally in a private/incognito window.
@@ -67,7 +69,8 @@ def search_products(
     max_price: Annotated[float | None, Field(description="Only items at or under this price, in USD.", gt=0)] = None,
 ) -> list[dict]:
     """Search all published shops. Returns up to 10 matches, best first,
-    with id, title, price, shop, short description and stock."""
+    with id, title, price, shop (incl. storefront url), short description,
+    stock and a photo url (image_url) you can show the user."""
     return _run(tools.search_products, query, max_price)
 
 
@@ -75,7 +78,8 @@ def search_products(
 def get_product(
     product_id: Annotated[str, Field(description="Product id from search_products, e.g. 'prod_3f9a1c2b7d4e'.")],
 ) -> dict:
-    """Full listing for one product: description, attributes, tags, price and stock."""
+    """Full listing for one product: description, attributes, tags, price,
+    stock, shipping/tax note, photo url (image_url) and the shop's storefront url."""
     return _run(tools.get_product, product_id)
 
 
