@@ -126,10 +126,16 @@ class ShopOut(BaseModel):
     @classmethod
     def of(cls, s: Shop, products: list[Product]) -> "ShopOut":
         return cls(
-            **s.model_dump(exclude={"created_at"}),
+            **s.model_dump(exclude={"created_at", "seller_token_hash"}),
             created_at=_utc(s.created_at),
             products=[ProductOut.of(p) for p in products],
         )
+
+
+class ShopCreated(ShopOut):
+    """POST /api/shops response: the only time the seller token is shown."""
+
+    seller_token: str
 
 
 class StorefrontOut(BaseModel):

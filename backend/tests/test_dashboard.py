@@ -2,12 +2,13 @@
 
 from app import paypal
 from test_agent import Chat
-from test_api import captured, fake_create
+from test_api import TOKENS, captured, fake_create
 from test_mcp import call_tool, published_shop
 
 
 def dash(client, shop_id, after=0):
-    r = client.get(f"/api/shops/{shop_id}/dashboard", params={"after": after})
+    headers = {"X-Seller-Token": TOKENS[shop_id]} if shop_id in TOKENS else {}
+    r = client.get(f"/api/shops/{shop_id}/dashboard", params={"after": after}, headers=headers)
     assert r.status_code == 200, r.text
     return r.json()
 

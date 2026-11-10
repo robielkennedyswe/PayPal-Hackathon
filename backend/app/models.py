@@ -42,6 +42,9 @@ class Shop(SQLModel, table=True):
     name: str
     paypal_payee_email: str  # seller's sandbox business account; receives payment
     published: bool = False  # only published shops are visible to agents
+    # SHA-256 of the seller token (seller_auth.py). None = nobody can manage
+    # the shop until a token is issued.
+    seller_token_hash: str | None = None
     created_at: datetime = Field(default_factory=_now)
 
 

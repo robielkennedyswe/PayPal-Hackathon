@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import activity, agent, ai_budget, ai_provider, catalog_ai, config, mcp_server
+from app import activity, agent, ai_budget, ai_provider, catalog_ai, config, mcp_server, seller_auth
 from app.checkout import CheckoutError, Outcome, complete_order, create_checkout
 from app.config import FRONTEND_URL
 from app.db import UPLOAD_DIR, get_session, init_db
@@ -37,6 +37,7 @@ from app.schemas import (
     ProductUpdate,
     ShopCard,
     ShopCreate,
+    ShopCreated,
     ShopOut,
     StorefrontOut,
 )
@@ -146,6 +147,28 @@ def _product_or_404(session: Session, product_id: str) -> Product:
     return product
 
 
+def _require_seller(request: Request, shop: Shop) -> None:
+    """Only the holder of the shop's seller token may manage it (seller_auth.py).
+    401 = no token sent, 403 = wrong token (or the shop has none yet)."""
+    token = request.headers.get(seller_auth.HEADER)
+    if not token:
+        raise HTTPException(401, seller_auth.NO_ACCESS)
+    if not seller_auth.matches(token, shop.seller_token_hash):
+        raise HTTPException(403, seller_auth.NO_ACCESS)
+
+
+def _seller_shop(request: Request, session: Session, shop_id: str) -> Shop:
+    shop = _shop_or_404(session, shop_id)
+    _require_seller(request, shop)
+    return shop
+
+
+def _seller_product(request: Request, session: Session, product_id: str) -> Product:
+    product = _product_or_404(session, product_id)
+    _require_seller(request, _shop_or_404(session, product.shop_id))
+    return product
+
+
 def _products(session: Session, shop_id: str) -> list[Product]:
     return list(
         session.exec(select(Product).where(Product.shop_id == shop_id).order_by(Product.created_at))
@@ -177,21 +200,25 @@ def health() -> dict:
 
 
 @app.post("/api/shops", status_code=201)
-def create_shop(body: ShopCreate, session: Session = Depends(get_session)) -> ShopOut:
+def create_shop(body: ShopCreate, session: Session = Depends(get_session)) -> ShopCreated:
+    token, token_hash = seller_auth.new_token()
     shop = Shop(
         slug=_unique_slug(session, body.name),
         name=body.name,
         paypal_payee_email=body.paypal_payee_email,
+        seller_token_hash=token_hash,
     )
     session.add(shop)
     session.commit()
     session.refresh(shop)
-    return ShopOut.of(shop, [])
+    # The only response that contains the token; we keep just its hash.
+    return ShopCreated(**ShopOut.of(shop, []).model_dump(), seller_token=token)
 
 
 @app.get("/api/shops/{shop_id}")
-def get_shop(shop_id: str, session: Session = Depends(get_session)) -> ShopOut:
-    shop = _shop_or_404(session, shop_id)
+def get_shop(shop_id: str, request: Request, session: Session = Depends(get_session)) -> ShopOut:
+    # Seller-only: includes the payee email and unpublished drafts.
+    shop = _seller_shop(request, session, shop_id)
     return ShopOut.of(shop, _products(session, shop_id))
 
 
@@ -201,7 +228,7 @@ async def upload_product_photo(
 ) -> ProductOut:
     """One photo in, one AI-drafted product out. The frontend calls this once
     per photo, so each draft card can appear as soon as it's ready."""
-    _shop_or_404(session, shop_id)
+    _seller_shop(request, session, shop_id)
 
     filename = _safe_filename(file.filename or "")
     if Path(filename).suffix not in catalog_ai.SUPPORTED_EXTS:
@@ -249,9 +276,9 @@ async def upload_product_photo(
 
 @app.patch("/api/products/{product_id}")
 def update_product(
-    product_id: str, body: ProductUpdate, session: Session = Depends(get_session)
+    product_id: str, body: ProductUpdate, request: Request, session: Session = Depends(get_session)
 ) -> ProductOut:
-    product = _product_or_404(session, product_id)
+    product = _seller_product(request, session, product_id)
     for field, value in body.model_dump(exclude_unset=True).items():
         if value is None:
             raise HTTPException(422, f"{field} cannot be null")
@@ -263,8 +290,8 @@ def update_product(
 
 
 @app.delete("/api/products/{product_id}", status_code=204)
-def delete_product(product_id: str, session: Session = Depends(get_session)) -> None:
-    product = _product_or_404(session, product_id)
+def delete_product(product_id: str, request: Request, session: Session = Depends(get_session)) -> None:
+    product = _seller_product(request, session, product_id)
     if session.exec(select(Order).where(Order.product_id == product_id)).first():
         # Keep order history intact; the seller can set stock to 0 instead.
         raise HTTPException(409, "Product has orders; set stock to 0 instead")
@@ -275,8 +302,8 @@ def delete_product(product_id: str, session: Session = Depends(get_session)) -> 
 
 
 @app.post("/api/shops/{shop_id}/publish")
-def publish_shop(shop_id: str, session: Session = Depends(get_session)) -> ShopOut:
-    shop = _shop_or_404(session, shop_id)
+def publish_shop(shop_id: str, request: Request, session: Session = Depends(get_session)) -> ShopOut:
+    shop = _seller_shop(request, session, shop_id)
     if not _products(session, shop_id):
         raise HTTPException(400, "Add at least one product before publishing")
     shop.published = True
@@ -292,13 +319,15 @@ FEED_LIMIT = 50
 
 
 @app.get("/api/shops/{shop_id}/dashboard")
-def dashboard(shop_id: str, after: int = 0, session: Session = Depends(get_session)) -> DashboardOut:
+def dashboard(
+    shop_id: str, request: Request, after: int = 0, session: Session = Depends(get_session)
+) -> DashboardOut:
     """Seller dashboard (screen 3), polled every few seconds.
 
     after=<last event id seen> returns only newer events, so polling stays
     cheap; stats and inventory are always current.
     """
-    shop = _shop_or_404(session, shop_id)
+    shop = _seller_shop(request, session, shop_id)
     products = _products(session, shop_id)
     titles = {p.id: p.title for p in products}
     product_ids = list(titles)

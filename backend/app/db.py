@@ -45,6 +45,19 @@ def init_db() -> None:
     from app import models  # noqa: F401  (import registers the tables)
 
     SQLModel.metadata.create_all(engine)
+    _add_missing_columns()
+
+
+def _add_missing_columns() -> None:
+    """create_all() never alters existing tables, so columns added after the
+    hosted database was created are added here (nullable, so old rows stay valid)."""
+    added = {"shops": {"seller_token_hash": "VARCHAR"}}
+    with engine.begin() as conn:
+        for table, columns in added.items():
+            existing = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
+            for name, sql_type in columns.items():
+                if name not in existing:
+                    conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
 
 
 def get_session() -> Iterator[Session]:

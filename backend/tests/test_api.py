@@ -5,12 +5,18 @@ from app.db import engine
 from app.models import Order, OrderStatus
 
 SELLER = "seller@business.example.com"
+TOKENS: dict[str, str] = {}  # shop id -> seller token, for tests that use several shops
 
 
 def make_shop(client, name="Clay Corner"):
+    """Create a shop and act as its seller from now on: like the browser, the
+    client sends the shop's seller token with every request (the most
+    recently created shop wins)."""
     r = client.post("/api/shops", json={"name": name, "paypal_payee_email": SELLER})
     assert r.status_code == 201
-    return r.json()
+    shop = r.json()
+    client.headers["X-Seller-Token"] = TOKENS[shop["id"]] = shop["seller_token"]
+    return shop
 
 
 def upload(client, shop_id, filename="blue_mug.jpg", data=b"fake-image"):
