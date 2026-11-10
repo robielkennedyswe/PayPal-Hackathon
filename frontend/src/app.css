@@ -660,6 +660,11 @@ textarea.input {
   color: var(--danger);
 }
 
+.save-state.unsaved {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .agent-panel {
   position: sticky;
   top: 72px;

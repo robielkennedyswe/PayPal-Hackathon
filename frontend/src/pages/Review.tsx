@@ -1,11 +1,13 @@
 // Screen 2: edit each AI draft, see the agent-facing JSON live, publish.
-// Fields save on blur; Publish saves anything still pending first.
+// Before publishing, fields save on blur (drafts) and Publish saves anything
+// still pending. Once published, edits go live only when the seller clicks
+// Save changes, so agents never see half-finished edits.
 
 import { useEffect, useMemo, useState } from 'react'
 import { agentView } from '../agentView'
 import { api } from '../api'
 import { Link } from '../components/Link'
-import { navigate } from '../router'
+import { navigate, setLeaveGuard } from '../router'
 import { SetupSteps } from '../components/SetupSteps'
 import { TopBar } from '../components/TopBar'
 import { rememberShop } from '../myShops'
@@ -91,6 +93,26 @@ export function Review({ shopId }: { shopId: string }) {
     [forms],
   )
   const anyInvalid = Object.values(errors).some((e) => Object.keys(e).length > 0)
+  // Products whose form differs from what's saved on the server.
+  const dirty = useMemo(
+    () => new Set(products.filter((p) => forms[p.id] && Object.keys(changes(forms[p.id], p)).length > 0).map((p) => p.id)),
+    [products, forms],
+  )
+  const published = shop?.published ?? false
+  const unsaved = published && dirty.size > 0
+
+  // Published shop with unsaved edits: ask before leaving (tab close/reload,
+  // and in-app links via the router guard).
+  useEffect(() => {
+    if (!unsaved) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', onBeforeUnload)
+    setLeaveGuard(() => window.confirm('You have unsaved changes. Leave without saving them?'))
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      setLeaveGuard(null)
+    }
+  }, [unsaved])
 
   const setField = (id: string, field: Field, value: string) => {
     setSavedNotice(false)
@@ -191,7 +213,10 @@ export function Review({ shopId }: { shopId: string }) {
             </Link>
             <h1>Review &amp; publish</h1>
             <p>
-              Check each AI draft for <strong>{shop.name}</strong>. Changes save when you leave a field.
+              Check each AI draft for <strong>{shop.name}</strong>.{' '}
+              {shop.published
+                ? 'Edits go live to AI agents when you click Save changes.'
+                : 'Changes save when you leave a field.'}
             </p>
           </div>
           <div className="head-actions">
@@ -206,14 +231,16 @@ export function Review({ shopId }: { shopId: string }) {
               // Not disabled while a field is saving: clicking Publish blurs the
               // field, which starts a save, and a button that disables itself
               // mid-click swallows the click. publish() saves pending edits itself.
-              // Once published it stays usable as "Save changes" (it used to be a
-              // disabled "Published ✓", which looked like edits couldn't go live).
-              disabled={publishing || anyInvalid || products.length === 0}
+              // Once published it becomes "Save changes": enabled only when an
+              // edit is pending, since that's the only way edits go live.
+              disabled={publishing || anyInvalid || products.length === 0 || (shop.published && dirty.size === 0)}
             >
               {shop.published
                 ? publishing
                   ? 'Saving…'
-                  : 'Save changes'
+                  : dirty.size > 0
+                    ? `Save changes (${dirty.size})`
+                    : 'All changes saved ✓'
                 : publishing
                   ? 'Publishing…'
                   : 'Publish to AI agents'}
@@ -225,7 +252,7 @@ export function Review({ shopId }: { shopId: string }) {
           <div className="banner banner-success" role="status">
             <div>
               <strong>{shop.name} is live to AI agents.</strong>
-              <div>Edits you make now go live as soon as they save.</div>
+              <div>Edits go live when you click Save changes.</div>
             </div>
             <Link href={`/sell/${shopId}/dashboard`} className="btn btn-primary btn-sm">
               Open your dashboard →
@@ -265,6 +292,7 @@ export function Review({ shopId }: { shopId: string }) {
                   form={forms[p.id]}
                   errors={errors[p.id] ?? {}}
                   saveState={saveState[p.id] ?? 'idle'}
+                  unsaved={shop.published && dirty.has(p.id)}
                   saveError={saveError[p.id]}
                   selected={p.id === selected}
                   onSelect={() => setSelected(p.id)}
@@ -273,7 +301,8 @@ export function Review({ shopId }: { shopId: string }) {
                     // Show "20" as "20.00" once the seller leaves the field.
                     const price = normalizePrice(forms[p.id].price)
                     if (field === 'price' && price) setField(p.id, 'price', price)
-                    save(p.id)
+                    // Drafts save as you go; a live shop waits for Save changes.
+                    if (!shop.published) save(p.id)
                   }}
                   onRemove={() => remove(p.id)}
                 />
@@ -322,6 +351,7 @@ type EditorProps = {
   form: Form
   errors: Partial<Record<Field, string>>
   saveState: SaveState
+  unsaved: boolean
   saveError?: string
   selected: boolean
   onSelect: () => void
@@ -330,7 +360,7 @@ type EditorProps = {
   onRemove: () => void
 }
 
-function ProductEditor({ product: p, form, errors, saveState, saveError, selected, onSelect, onChange, onBlur, onRemove }: EditorProps) {
+function ProductEditor({ product: p, form, errors, saveState, unsaved, saveError, selected, onSelect, onChange, onBlur, onRemove }: EditorProps) {
   const id = (f: Field) => `${p.id}-${f}`
   const input = (f: Field, label: string, extra?: { prefix?: string; inputMode?: 'decimal' | 'numeric'; hint?: string }) => (
     <div className="field">
@@ -364,8 +394,16 @@ function ProductEditor({ product: p, form, errors, saveState, saveError, selecte
       <div className="editor-fields">
         <div className="editor-top">
           <span className="chip seller">AI draft</span>
-          <span className={`save-state ${saveState}`} aria-live="polite">
-            {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Not saved' : ''}
+          <span className={`save-state ${unsaved && saveState !== 'saving' && saveState !== 'error' ? 'unsaved' : saveState}`} aria-live="polite">
+            {saveState === 'saving'
+              ? 'Saving…'
+              : saveState === 'error'
+                ? 'Not saved'
+                : unsaved
+                  ? '● Unsaved changes'
+                  : saveState === 'saved'
+                    ? 'Saved'
+                    : ''}
           </span>
         </div>
         {input('title', 'Title')}

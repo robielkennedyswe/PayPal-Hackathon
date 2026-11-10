@@ -6,7 +6,15 @@ import { useEffect, useState } from 'react'
 
 const NAV_EVENT = 'app:navigate'
 
+// A page with unsaved edits can ask before in-app navigation (Link clicks,
+// navigate()). Closing or reloading the tab is covered by beforeunload.
+let leaveGuard: (() => boolean) | null = null
+export function setLeaveGuard(guard: (() => boolean) | null) {
+  leaveGuard = guard
+}
+
 export function navigate(to: string, { replace = false } = {}) {
+  if (leaveGuard && !leaveGuard()) return
   if (replace) window.history.replaceState(null, '', to)
   else window.history.pushState(null, '', to)
   window.dispatchEvent(new Event(NAV_EVENT))
