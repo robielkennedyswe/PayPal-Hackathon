@@ -2,137 +2,219 @@
 
 **Make any tiny shop buyable by AI agents.**
 
-A small seller drops in product photos, AI turns each photo into a structured listing, and the seller reviews and publishes. Each published shop gets a public storefront and an **MCP endpoint**, so any MCP-compatible AI agent can search the shop and buy from it. Checkout uses **PayPal Orders v2**, and the buyer approves every payment in PayPal. The agent can never pay on its own.
+A small seller uploads product photos. Claude turns each photo into a structured listing, the seller checks price and stock, and publishes. Every published shop gets a storefront and an **MCP endpoint**, so any MCP-compatible AI agent (Claude, Claude Code, or your own) can search it and buy from it. Checkout runs on **PayPal Orders v2** with the seller as payee, and **the buyer approves every payment in PayPal. The agent can never pay on its own.**
 
-Built for the *Build What's Next with PayPal and AI* hackathon. All payments run against the **PayPal sandbox**. No real money moves.
+**Live demo: https://shopmcp.onrender.com** · Demo video: <!-- TODO: YouTube link --> *coming soon* · [MIT license](LICENSE)
 
-> **Status: in development (deadline Nov 12, 2026).** The seller flow and storefront work end to end with a mock AI provider. The MCP server, shopper agent, seller dashboard, real Claude API and hosting are in progress. See [Roadmap](#roadmap).
+Built for the *Build What's Next with PayPal and AI* hackathon. All payments use the **PayPal sandbox**, so no real money moves.
+
+<!-- TODO: screenshots (storefront, review page, dashboard feed, agent chat) after the final UI pass -->
 
 ## Who it's for
 
-Crafters, market vendors and other solo sellers who are too small for PayPal's own agent-ready and store-sync programs, but still want AI shoppers to find and buy their products.
+Crafters, market vendors and other solo sellers who are too small for PayPal's own agent-ready and store-sync programs, but still want AI shoppers to find and buy their products. No integration work: photos in, agent-ready shop out.
+
+## Try it in 2 minutes
+
+You need a **PayPal sandbox Personal account** to approve payments (test money only):
+
+<!-- TODO: sandbox buyer email + password for judges -->
+- Email: *to be added*
+- Password: *to be added*
+
+Always open PayPal approval links in a **private/incognito window**. If you're logged into the PayPal developer dashboard in the same browser, the sandbox checkout page often fails to load.
+
+### 1. Shop with the built-in agent (nothing to install)
+
+1. Open **[shopmcp.onrender.com/agent](https://shopmcp.onrender.com/agent)** and ask, for example: *"Find me a climbing rope under $50."*
+2. The agent searches, shows the product, and asks you to confirm. Say *"yes, buy it"*.
+3. Click **Review & pay in PayPal**, copy the link into a private window, log in with the sandbox buyer, and approve.
+4. Back in the chat, the page notices the approval and the agent confirms the order once the payment is captured. The right-hand panel traces every tool call.
+
+### 2. Shop with your own AI agent over MCP
+
+The MCP endpoint is **`https://shopmcp.onrender.com/mcp`** (streamable HTTP, no auth).
+
+- **Claude Code:**
+  ```bash
+  claude mcp add --transport http shopmcp https://shopmcp.onrender.com/mcp
+  ```
+  Then ask Claude Code to find and buy something.
+- **claude.ai or Claude Desktop:** **Customize → Connectors → Add custom connector**, paste the endpoint URL, and leave authentication empty. ([Anthropic's guide](https://claude.com/docs/connectors/custom/remote-mcp))
+- **Any other MCP client:** add the URL as a remote (streamable HTTP) server.
+
+### 3. Be the seller
+
+1. Open **[/sell](https://shopmcp.onrender.com/sell)**, enter a shop name and a PayPal sandbox **business** email, and drop in a few product photos. Each one becomes an AI-drafted listing in a few seconds.
+   <!-- TODO: which payee email judges should use (decide later) -->
+2. **Review & publish:** edit title, description, price, stock and tags. The side panel shows the exact JSON an agent will receive.
+3. **Dashboard:** your MCP endpoint, sales stats, and a live feed of what agents do (search → view → checkout → approved → **Sold via AI agent**).
+
+The hosted site has a small shared AI budget. If listing generation says the daily limit is reached, try the other two flows.
 
 ## How it works
 
 ```
-Seller                        ShopMCP                                   PayPal (sandbox)
-──────                        ───────                                   ────────────────
-drops photos ───────────────▶ AI vision → draft listing
-reviews price/stock, publishes ▶ storefront /s/<slug> + MCP endpoint
+Seller                          ShopMCP (FastAPI)                         PayPal sandbox
+──────                          ─────────────────                         ──────────────
+photos ───────────────────────▶ Claude vision → listing JSON
+review, publish ──────────────▶ storefront /s/<slug> + MCP tools
 
-AI agent (any MCP client) ──▶ search_products / get_product
-                             create_checkout ─────────────────────────▶ create order (seller is payee)
-buyer ◀──────────── approve link ◀───────────────────────────────────── approval URL
-buyer approves in PayPal ──────────────────────────────────────────────▶
-                             /paypal/return ◀───────────────────────── redirect
-                             capture + decrement stock ───────────────▶ capture → COMPLETED
+AI agent (MCP or built-in) ───▶ search_products / get_product
+                                create_checkout ─────────────────────────▶ create order (payee = seller)
+buyer ◀──────── approve_url ◀──────────────────────────────────────────── payer-action link
+buyer approves in PayPal ────────────────────────────────────────────────▶
+                                /paypal/return ◀──────────────────────── redirect
+                                capture, decrement stock ───────────────▶ COMPLETED
+agent ────────────────────────▶ get_order_status → "Paid"
+seller dashboard ◀───────────── live activity feed
 ```
 
-## What works today
+### Payment safety
 
-| Feature | Where |
-|---|---|
-| Add products: shop details, photo drop zone, AI-drafted listing cards | `/sell` |
-| Review & publish: inline edits, live "What AI agents will see" JSON, publish | `/sell/<shopId>/review` |
-| Public storefront: live prices and stock, sold-out badges | `/s/<slug>` |
-| Server-side checkout completion: capture on PayPal return, idempotent, never captures when out of stock | `GET /paypal/return` |
-| Checkout result page for the buyer | `/checkout/result` |
-| PayPal sandbox order → approve → capture (verified live) | `scripts/paypal_smoke_test.py` |
+- **The agent can't pay.** `create_checkout` only returns an approval link. The MCP server's instructions tell every agent to confirm the item and total first, hand the link to the user, and never claim an order is paid until `get_order_status` says `COMPLETED`.
+- **The server captures, not the agent.** Capture happens on PayPal's return redirect. If that redirect is missed (the buyer closed the tab), `get_order_status` checks PayPal and captures then.
+- **Stock is re-checked at capture.** If an item sold out while the buyer was approving, the order isn't captured and the buyer isn't charged.
+- **Idempotent.** Refreshing the return page or capturing twice never double-charges (`ORDER_ALREADY_CAPTURED` is handled).
+- **Sandbox only.** The PayPal client refuses any base URL that isn't the sandbox.
 
-## Tech stack
+## MCP tools
 
-- **Frontend:** React 19 + Vite + TypeScript (`frontend/`)
-- **Backend:** Python, FastAPI, SQLModel on SQLite (`backend/`)
-- **Payments:** PayPal Orders v2 REST (sandbox), OAuth2 client credentials
-- **AI:** Claude API (vision for listings, tool use for the shopper agent) behind a provider switch; a mock provider is used during development
-- **Agents:** MCP server (FastMCP, streamable HTTP) mounted in the backend *(in progress)*
+The built-in shopper agent calls the same four Python functions as the MCP server (`backend/app/tools.py`), so both behave identically.
 
-## Quick start
+| Tool | Input | Returns |
+|---|---|---|
+| `search_products` | `query`, optional `max_price` (USD) | Up to 10 matches across all published shops, best first: id, title, price, shop, short description, stock |
+| `get_product` | `product_id` | The full listing: description, attributes, tags, price, stock, availability, shop |
+| `create_checkout` | `product_id`, `qty` (1–10) | `order_id`, `approve_url`, total. Creates a PayPal order with the seller as payee |
+| `get_order_status` | `order_id` | `CREATED` / `APPROVED` / `COMPLETED` with a plain-language message (captures if the return redirect was missed) |
 
-**Prerequisites:** Python 3.11+, Node.js 20.19+ or 22.12+ (tested with Python 3.13 and Node 24), and a PayPal developer account with sandbox credentials.
+## How AI is used
+
+AI runs both sides of the marketplace:
+
+- **Listings from photos (Claude vision).** `catalog_ai.py` sends each photo to Claude with a strict JSON schema (title, description, attributes, tags, suggested price) and validates the result. Results are cached by the photo's SHA-256, so the same photo is never sent twice.
+- **The shopper agent (Claude tool use).** `agent.py` runs Claude over the four tools above, with at most 6 tool rounds per message, low effort (shopping chat doesn't need deep reasoning) and prompt caching.
+- **Agents as customers (MCP).** Any external agent can shop through the MCP server, and every action shows up on the seller's dashboard, credited to "MCP agent" or "Built-in agent".
+- **Cost controls (`ai_budget.py`).** Every Claude call goes through one function that enforces a daily and a total USD budget, a daily call cap and a per-visitor hourly limit, before the call is made.
+- **Models:** `claude-opus-5-5` for the demo and judging, `claude-haiku-5-5` for cheap testing. A `mock` provider (canned listings, a scripted agent that still calls the real tools and the real PayPal sandbox) is for development only.
+
+### AI tools used to build it
+
+- **Claude Code** (Anthropic): the coding assistant throughout: code, tests, debugging, deployment and these docs. The author reviewed and committed every change.
+- **Claude Design:** designed the four main screens.
+- **Claude API:** powers the product itself (above).
+
+## Security
+
+- **Seller tokens.** There are no accounts. Creating a shop returns a random token once, and the server stores only its SHA-256 hash. Every seller action (upload, edit, delete, publish, dashboard) requires it, so knowing a shop's public id isn't enough to change it. A **Copy seller link** button on the dashboard opens the shop on another device; the token travels in the URL `#fragment`, which browsers never send to servers.
+- **No secrets in code.** All credentials come from environment variables; `.env` is gitignored, and AI error details are never logged (they can contain the API key header).
+- **MCP Host check.** The MCP endpoint only answers requests addressed to its own host (DNS-rebinding protection).
+- **Per-visitor limits.** The visitor IP comes from Cloudflare's `True-Client-IP` header, which a client can't spoof (verified on the hosted site). The global AI budgets are the hard cap either way.
+
+## Run it locally
+
+**Prerequisites:** Python 3.11+, Node.js 20.19+ or 22.12+ (tested with Python 3.13 and Node 24), and a [PayPal developer](https://developer.paypal.com) account. Sandbox credentials are under **Apps & Credentials** (Sandbox) → your app. A Claude API key is optional: without one, the app runs on the mock AI provider.
 
 ```bash
 git clone https://github.com/robielkennedyswe/PayPal-Hackathon.git
 cd PayPal-Hackathon
+cp .env.example .env              # fill in Client_ID and Secret_Key (KEY=value, no space after "=")
 
-# 1. Environment
-cp .env.example .env        # then fill in Client_ID and Secret_Key (see below)
-
-# 2. Backend (terminal 1)
+# Backend (terminal 1)
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/uvicorn app.main:app --reload --port 8000 --timeout-graceful-shutdown 3
 
-# 3. Frontend (terminal 2)
+# Frontend (terminal 2)
 cd frontend
 npm install
-npm run dev
+npm run dev                       # http://localhost:5173 (proxies /api, /mcp, /paypal, /uploads to :8000)
 ```
 
-Open **http://localhost:5173** and click **Start selling**. API docs are at **http://localhost:8000/docs**.
+Open **http://localhost:5173**. API docs are at http://localhost:8000/docs.
 
-In mock mode the AI picks a canned listing from words in the photo's **filename**, so name test photos like `blue_mug.jpg`, `white_vase.png` or `sage_bowl.jpg`. Other names get a generic draft.
+- **Mock AI** (the default) picks a canned listing from words in the photo's *filename*: `blue_mug.jpg`, `white_vase.png`, `sage_bowl.jpg`. Other names get a generic draft.
+- **Real Claude:** set `AI_PROVIDER=anthropic`, `AI_MODEL=claude-haiku-5-5` (or `claude-opus-5-5`) and `ANTHROPIC_API_KEY`.
+- **Local MCP:** `claude mcp add --transport http shopmcp http://localhost:8000/mcp`.
+- **Fresh start:** delete `backend/data/` (SQLite database + photos).
 
-## Environment variables
+### Environment variables
 
-Set these in `.env` at the repo root. Write them as `KEY=value` with **no space after `=`**. Blank values fall back to the defaults shown.
+Set in `.env` at the repo root (`.env.example` lists them all). Blank values use the defaults.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `Client_ID` | *(required)* | PayPal sandbox app client ID |
 | `Secret_Key` | *(required)* | PayPal sandbox app secret |
-| `PAYPAL_BASE_URL` | `https://api-m.sandbox.paypal.com` | PayPal API base. Non-sandbox URLs are refused. |
+| `PAYPAL_BASE_URL` | `https://api-m.sandbox.paypal.com` | PayPal API base; non-sandbox URLs are refused |
 | `AI_PROVIDER` | `mock` | `mock` or `anthropic` |
-| `AI_MODEL` | | Claude model id (required when `AI_PROVIDER=anthropic`) |
-| `ANTHROPIC_API_KEY` | | Claude API key (required when `AI_PROVIDER=anthropic`) |
-| `APP_BASE_URL` | `http://localhost:8000` | Backend URL, used for PayPal return/cancel redirects |
-| `FRONTEND_URL` | `http://localhost:5173` | Frontend URL, used for CORS and post-checkout redirects |
-| `DATA_DIR` | `backend/data` | SQLite database and uploaded photos |
+| `AI_MODEL` | | Claude model id, required for `anthropic` |
+| `ANTHROPIC_API_KEY` | | Claude API key, required for `anthropic` |
+| `AI_DAILY_BUDGET_USD` | `5.00` | Max estimated Claude spend per UTC day |
+| `AI_TOTAL_BUDGET_USD` | `25.00` | Max estimated Claude spend overall |
+| `AI_DAILY_CALL_LIMIT` | `300` | Max Claude calls per UTC day |
+| `AI_CLIENT_HOURLY_CALL_LIMIT` | `40` | Max Claude calls per visitor per hour |
+| `APP_BASE_URL` | `http://localhost:8000` | Public backend URL (PayPal return URLs, MCP host check). On Render: `RENDER_EXTERNAL_URL` |
+| `FRONTEND_URL` | `http://localhost:5173` | Browser app URL (CORS, post-checkout redirect). On Render: `RENDER_EXTERNAL_URL` |
+| `DATA_DIR` | `backend/data` | SQLite database and uploaded photos (`/var/data` in Docker) |
 
-Get sandbox credentials at [developer.paypal.com](https://developer.paypal.com) → **Apps & Credentials** (Sandbox) → your app.
+### Test a payment from the command line
 
-## Testing a payment as a sandbox buyer
-
-1. At [developer.paypal.com/dashboard/accounts](https://developer.paypal.com/dashboard/accounts), find the **Personal** sandbox account, then **⋯ → View/edit account** and copy its email and password.
-2. Run `backend/.venv/bin/python scripts/paypal_smoke_test.py`. It creates a $34.00 order and prints an approve link.
-3. Open the link in a **private/incognito window**. If you're logged into the PayPal developer dashboard in the same browser, the checkout page often fails to load.
-4. Log in as the **Personal** account and approve. The script captures the payment and prints the capture ID.
+```bash
+backend/.venv/bin/python scripts/paypal_smoke_test.py    # creates a $34 sandbox order, prints the approve link, captures after you approve
+backend/.venv/bin/python scripts/vision_smoke_test.py    # photo → listing JSON (works in mock mode)
+```
 
 ## Tests
 
 ```bash
-cd backend && .venv/bin/python -m pytest          # 16 API tests; PayPal is faked, no network
-cd frontend && npm run build && npm run lint      # type-check, build, lint
+cd backend && .venv/bin/python -m pytest          # 73 tests
+cd frontend && npm run build && npm run lint      # type-check, build, lint (oxlint)
 ```
+
+The tests run on a throwaway database with the mock AI. PayPal and Claude are faked, and any real network call fails the test. They cover checkout outcomes (completed, sold out at capture, already captured, PayPal errors), the MCP tools end to end, the shopper agent, AI budgets and caching, the dashboard feed, and seller-token access on every seller route.
+
+## Deployment (Render)
+
+The hosted demo is one Docker web service defined in [`render.yaml`](render.yaml) (Render → New → Blueprint):
+
+- The [`Dockerfile`](Dockerfile) builds the frontend with Node, then runs FastAPI on Python 3.13, which serves the built frontend from the same origin.
+- A 1 GB persistent disk at `/var/data` keeps the database and photos across deploys (this needs a paid instance).
+- Secrets (`Client_ID`, `Secret_Key`, `ANTHROPIC_API_KEY`) are entered in the Render dashboard; everything else is in `render.yaml`.
+- Every push to `main` redeploys. Health check: `/api/health`.
+
+To build the image on an Apple Silicon Mac, use `docker build --platform linux/amd64 .`: a native arm64 build crashes on import of `cryptography` under Docker Desktop.
 
 ## Project structure
 
 ```
-backend/     FastAPI app, PayPal client, AI provider, SQLite models, tests  → backend/README.md
-frontend/    React + Vite app (seller screens, storefront)                  → frontend/README.md
-scripts/     paypal_smoke_test.py, vision_smoke_test.py
-.env.example every environment variable (blank values)
+backend/app/
+  main.py            FastAPI routes, seller-token checks, serves the built frontend
+  mcp_server.py      MCP server (4 tools, payment-safety instructions) at /mcp
+  tools.py           the 4 tool functions, shared by MCP and the built-in agent
+  checkout.py        create_checkout / complete_order: stock checks, capture, idempotency
+  paypal.py          Orders v2 client: cached OAuth token, create/get/capture, sandbox guard
+  catalog_ai.py      photo → listing (Claude vision, strict JSON schema, cache)
+  agent.py           built-in shopper agent (Claude tool use)
+  ai_provider.py     mock vs anthropic switch; every Claude call goes through it
+  ai_budget.py       AI cost limits
+  seller_auth.py     seller tokens
+  activity.py        dashboard events
+  db.py, models.py   SQLite + SQLModel tables
+backend/tests/       pytest suite
+frontend/src/        React + Vite + TypeScript: seller screens, storefront, shopper agent
+scripts/             PayPal and vision smoke tests
+render.yaml, Dockerfile
 ```
 
-## Roadmap
+## Limitations and next steps
 
-- [x] PayPal sandbox client + smoke test
-- [x] Mock AI catalog behind a provider switch
-- [x] Database, API and tests
-- [x] Seller screens: add products, review & publish
-- [x] Public storefront
-- [ ] `create_checkout` with the seller as PayPal payee, plus a live end-to-end capture test
-- [ ] MCP server with `search_products`, `get_product`, `create_checkout`, `get_order_status`
-- [ ] Claude vision for listings; Claude tool-use shopper agent
-- [ ] Seller dashboard with a live activity feed; built-in shopper agent chat
-- [ ] Hosted demo on Render
-
-## AI tools used
-
-- **Claude Code** (Anthropic): used as a coding assistant throughout development, for code, tests, debugging and these docs. All changes were reviewed and committed by the author.
-- **Claude API** *(being integrated)*: vision turns product photos into listings; tool use powers the built-in shopper agent.
-- **Claude Design:** used to design the app screens.
+- **Sandbox and USD only.** Going live needs PayPal production credentials and a seller onboarding flow.
+- **No seller accounts.** Access is by seller token; a lost token can be reissued by the operator (`python -m app.seller_auth <shop_id>`).
+- **Approval opens PayPal's page.** The agent's approval card links to PayPal rather than embedding the PayPal JS SDK button.
+- **Next:** per-shop MCP endpoints, shipping and tax, PayPal webhooks instead of return-URL capture, and "snap to find" (photo → product search).
 
 ## License
 
