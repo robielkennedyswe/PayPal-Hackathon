@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import secrets
+import unicodedata
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from pathlib import Path
@@ -176,7 +177,10 @@ def _products(session: Session, shop_id: str) -> list[Product]:
 
 
 def _unique_slug(session: Session, name: str) -> str:
-    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "shop"
+    # Fold accents first ("Café Crème" -> "cafe-creme", not "caf-cr-me");
+    # names with no Latin letters at all fall back to "shop", "shop-2", ...
+    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    base = re.sub(r"[^a-z0-9]+", "-", ascii_name.lower()).strip("-")[:40] or "shop"
     slug, n = base, 2
     while session.exec(select(Shop).where(Shop.slug == slug)).first():
         slug, n = f"{base}-{n}", n + 1

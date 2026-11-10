@@ -34,6 +34,11 @@ def test_slugs_are_unique(client):
     assert make_shop(client)["slug"] == "clay-corner-2"
 
 
+def test_slugs_fold_accents_and_handle_non_latin_names(client):
+    assert make_shop(client, "Café Crème ☕")["slug"] == "cafe-creme"
+    assert make_shop(client, "東京ショップ")["slug"] == "shop"
+
+
 def test_shop_validation(client):
     r = client.post("/api/shops", json={"name": "  ", "paypal_payee_email": SELLER})
     assert r.status_code == 422
@@ -210,6 +215,43 @@ def fake_create(calls):
         return {"id": "PAYPAL123", "status": "PAYER_ACTION_REQUIRED",
                 "links": [{"rel": "payer-action", "href": "https://sandbox.paypal.com/approve?token=PAYPAL123"}]}
     return _create
+
+
+def test_checkout_retries_with_neutral_text_when_paypal_firewall_rejects(client, monkeypatch):
+    """PayPal answers 406 when seller text looks like code (e.g. "<script>");
+    checkout retries once with neutral text instead of failing the sale."""
+    calls = []
+    ok = fake_create(calls)
+
+    def picky(amount, currency="USD", **kw):
+        if "<script>" in kw["description"]:
+            calls.append({"rejected": kw["description"]})
+            raise paypal.PayPalError(406, "Not Acceptable")
+        return ok(amount, currency, **kw)
+
+    monkeypatch.setattr(paypal, "create_order", picky)
+    pid, _ = published_product(client)
+    client.patch(f"/api/products/{pid}", json={"title": "Mug <script>alert(1)</script>"})
+
+    r = client.post("/api/checkout", json={"product_id": pid, "qty": 2})
+    assert r.status_code == 201, r.text
+    rejected, retried = calls
+    assert "<script>" in rejected["rejected"]
+    assert retried["description"] == "Order from ShopMCP" and retried["item"]["name"] == f"ShopMCP item {pid}"
+    assert retried["amount"] == "39.98" and retried["item"]["quantity"] == 2  # amount unchanged
+
+
+def test_checkout_does_not_retry_other_paypal_errors(client, monkeypatch):
+    calls = []
+
+    def down(amount, currency="USD", **kw):
+        calls.append(kw)
+        raise paypal.PayPalError(500, "boom")
+
+    monkeypatch.setattr(paypal, "create_order", down)
+    pid, _ = published_product(client)
+    r = client.post("/api/checkout", json={"product_id": pid})
+    assert r.status_code == 502 and len(calls) == 1
 
 
 def test_checkout_creates_order_with_seller_as_payee(client, monkeypatch):
