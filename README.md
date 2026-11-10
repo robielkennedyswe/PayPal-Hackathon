@@ -41,14 +41,19 @@ The MCP endpoint is **`https://shopmcp.onrender.com/mcp`** (streamable HTTP, no 
   ```
   Then ask Claude Code to find and buy something.
 - **claude.ai or Claude Desktop:** **Customize → Connectors → Add custom connector**, paste the endpoint URL, and leave authentication empty. ([Anthropic's guide](https://claude.com/docs/connectors/custom/remote-mcp))
-- **Any other MCP client:** add the URL as a remote (streamable HTTP) server.
+- **ChatGPT** (paid plans, web): **Settings → Apps & Connectors → Advanced → Developer mode**, then create a connector with the endpoint URL and **No authentication**. ([OpenAI's guide](https://developers.openai.com/api/docs/guides/developer-mode))
+- **Gemini CLI:**
+  ```bash
+  gemini mcp add --transport http shopmcp https://shopmcp.onrender.com/mcp
+  ```
+- **Any other MCP client** (Cursor, VS Code, …): add the URL as a remote (streamable HTTP) server.
 
 ### 3. Be the seller
 
-1. Open **[/sell](https://shopmcp.onrender.com/sell)**, enter a shop name and a PayPal sandbox **business** email, and drop in a few product photos. Each one becomes an AI-drafted listing in a few seconds.
+1. Open **[/sell](https://shopmcp.onrender.com/sell)**, enter a shop name and a PayPal sandbox **business** email, and drop in a few product photos (on a phone, tap **Take a photo** to use the camera). Each one becomes an AI-drafted listing in a few seconds.
    <!-- TODO: which payee email judges should use (decide later) -->
-2. **Review & publish:** edit title, description, price, stock and tags. The side panel shows the exact JSON an agent will receive.
-3. **Dashboard:** your MCP endpoint, sales stats, and a live feed of what agents do (search → view → checkout → approved → **Sold via AI agent**).
+2. **Review & publish:** edit title, description, price, stock and tags. The side panel shows the exact JSON an agent will receive. **Publish shop** puts it live on its storefront and to AI agents; after that, edits go live when you click **Save changes**.
+3. **Dashboard:** your MCP endpoint, sales stats, a live feed of what agents do (search → view → checkout → approved → **Sold via AI agent**), and inventory. Only the seller can open it (see [Security](#security)).
 
 The hosted site has a small shared AI budget. If listing generation says the daily limit is reached, try the other two flows.
 
@@ -107,7 +112,7 @@ AI runs both sides of the marketplace:
 
 ## Security
 
-- **Seller tokens.** There are no accounts. Creating a shop returns a random token once, and the server stores only its SHA-256 hash. Every seller action (upload, edit, delete, publish, dashboard) requires it, so knowing a shop's public id isn't enough to change it. A **Copy seller link** button on the dashboard opens the shop on another device; the token travels in the URL `#fragment`, which browsers never send to servers.
+- **Seller tokens.** There are no accounts, and a shop isn't tied to its PayPal email (that's only where payments go). The browser that creates a shop owns it. Creating a shop returns a random token once, and the server stores only its SHA-256 hash. Every seller action (upload, edit, delete, publish, dashboard) requires it, so knowing a shop's public id isn't enough to change it. A **Copy seller link** button on the dashboard opens the shop on another device; the token travels in the URL `#fragment`, which browsers never send to servers.
 - **No secrets in code.** All credentials come from environment variables; `.env` is gitignored, and AI error details are never logged (they can contain the API key header).
 - **MCP Host check.** The MCP endpoint only answers requests addressed to its own host (DNS-rebinding protection).
 - **Per-visitor limits.** The visitor IP comes from Cloudflare's `True-Client-IP` header, which a client can't spoof (verified on the hosted site). The global AI budgets are the hard cap either way.
