@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { Link } from '../components/Link'
 import { TopBar } from '../components/TopBar'
-import { rememberShop, useMyShops } from '../myShops'
+import { rememberShop, sellerLink, useMyShops } from '../myShops'
 import { navigate } from '../router'
 import { timeAgo } from '../time'
 import type { ActivityEvent, Dashboard as DashboardData } from '../types'
@@ -46,6 +46,10 @@ export function Dashboard({ shopId }: { shopId: string }) {
         first = false
       } catch (e) {
         if (cancelled) return
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+          setError('no_access')
+          return // no point polling: this browser has no (valid) seller token
+        }
         setError(e instanceof ApiError && e.status === 404 ? 'not_found' : (e as Error).message)
       }
       setTick((t) => t + 1)
@@ -70,6 +74,23 @@ export function Dashboard({ shopId }: { shopId: string }) {
           <h1>Shop not found</h1>
           <Link href="/sell" className="btn" style={{ marginTop: 16 }}>
             Start a new shop
+          </Link>
+        </main>
+      </>
+    )
+  }
+  if (error === 'no_access') {
+    return (
+      <>
+        <TopBar />
+        <main className="page">
+          <h1>This dashboard is private</h1>
+          <p className="muted" style={{ marginTop: 8 }}>
+            Only the seller can see it. Open it in the browser that created the shop, or use the seller link
+            copied from that browser's dashboard.
+          </p>
+          <Link href="/shops" className="btn" style={{ marginTop: 16 }}>
+            Browse shops
           </Link>
         </main>
       </>
@@ -113,6 +134,7 @@ export function Dashboard({ shopId }: { shopId: string }) {
             )}
           </div>
           <div className="head-actions">
+            <CopySellerLink shopId={shop.id} />
             <Link href={`/sell/${shop.id}/review`} className="btn">
               Edit listings
             </Link>
@@ -307,6 +329,33 @@ function CopyField({ value, label }: { value: string; label: string }) {
         {copied ? 'Copied ✓' : 'Copy'}
       </button>
     </div>
+  )
+}
+
+/** Lets the seller open this dashboard on another device. The link contains
+ * the seller token, so it's copied, never shown on screen (screen recordings). */
+function CopySellerLink({ shopId }: { shopId: string }) {
+  const [copied, setCopied] = useState(false)
+  const link = sellerLink(shopId)
+  if (!link) return null
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard blocked: nothing else to do; the link is deliberately not displayed */
+    }
+  }
+  return (
+    <button
+      type="button"
+      className="btn"
+      onClick={copy}
+      title="Copies a private link that opens this dashboard in another browser. Anyone with it can manage your shop."
+    >
+      {copied ? 'Seller link copied ✓' : 'Copy seller link'}
+    </button>
   )
 }
 

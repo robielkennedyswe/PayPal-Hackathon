@@ -103,7 +103,7 @@ export function Review({ shopId }: { shopId: string }) {
     if (Object.keys(diff).length === 0) return true
     setSaveState((s) => ({ ...s, [id]: 'saving' }))
     try {
-      const updated = await api.updateProduct(id, diff)
+      const updated = await api.updateProduct(shopId, id, diff)
       setProducts((ps) => ps.map((p) => (p.id === id ? updated : p)))
       setSaveState((s) => ({ ...s, [id]: 'saved' }))
       setSaveError((s) => ({ ...s, [id]: '' }))
@@ -119,7 +119,7 @@ export function Review({ shopId }: { shopId: string }) {
     const p = products.find((x) => x.id === id)
     if (!p || !window.confirm(`Remove "${p.title}"?`)) return
     try {
-      await api.deleteProduct(id)
+      await api.deleteProduct(shopId, id)
     } catch (e) {
       setSaveError((s) => ({ ...s, [id]: (e as Error).message }))
       return

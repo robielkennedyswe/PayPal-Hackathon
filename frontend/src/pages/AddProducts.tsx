@@ -84,7 +84,7 @@ export function AddProducts({ shopId }: { shopId?: string }) {
       .then((s) => {
         shopRef.current = s
         setShop(s)
-        rememberShop(s.id, s.name)
+        rememberShop(s.id, s.name, s.seller_token) // the only time we receive the token
         setFormError(null)
         // Put the shop id in the URL so a refresh resumes this shop.
         navigate(`/sell/${s.id}`, { replace: true })
@@ -158,7 +158,7 @@ export function AddProducts({ shopId }: { shopId?: string }) {
   async function remove(d: Draft) {
     if (d.product) {
       try {
-        await api.deleteProduct(d.product.id)
+        await api.deleteProduct(d.product.shop_id, d.product.id)
       } catch (e) {
         update(d.key, { error: (e as Error).message })
         return

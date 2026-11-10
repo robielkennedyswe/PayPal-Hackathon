@@ -1,6 +1,7 @@
 // Typed wrappers around the FastAPI routes. In dev, relative URLs go
 // through the Vite proxy to :8000. (Deploy: prefix with the backend URL.)
 
+import { getSellerToken } from './myShops'
 import type { AgentHistory, AgentReply, Dashboard, Product, ProductUpdate, Shop, ShopCard, Storefront } from './types'
 
 export class ApiError extends Error {
@@ -29,39 +30,48 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (res.status === 204 ? undefined : await res.json()) as T
 }
 
-const json = (method: string, body: unknown): RequestInit => ({
+const json = (method: string, body: unknown, headers: Record<string, string> = {}): RequestInit => ({
   method,
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', ...headers },
   body: JSON.stringify(body),
 })
 
+/** Seller routes need the shop's token (see myShops.ts). Without one the
+ * backend answers 401, which the pages show as "no access". */
+const seller = (shopId: string): Record<string, string> => {
+  const token = getSellerToken(shopId)
+  return token ? { 'X-Seller-Token': token } : {}
+}
+
 export const api = {
   createShop: (name: string, paypal_payee_email: string) =>
-    request<Shop>('/api/shops', json('POST', { name, paypal_payee_email })),
+    request<Shop & { seller_token: string }>('/api/shops', json('POST', { name, paypal_payee_email })),
 
-  getShop: (shopId: string) => request<Shop>(`/api/shops/${shopId}`),
+  getShop: (shopId: string) => request<Shop>(`/api/shops/${shopId}`, { headers: seller(shopId) }),
 
   uploadPhoto: (shopId: string, file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return request<Product>(`/api/shops/${shopId}/products`, { method: 'POST', body: form })
+    return request<Product>(`/api/shops/${shopId}/products`, { method: 'POST', body: form, headers: seller(shopId) })
   },
 
-  updateProduct: (productId: string, changes: ProductUpdate) =>
-    request<Product>(`/api/products/${productId}`, json('PATCH', changes)),
+  updateProduct: (shopId: string, productId: string, changes: ProductUpdate) =>
+    request<Product>(`/api/products/${productId}`, json('PATCH', changes, seller(shopId))),
 
-  deleteProduct: (productId: string) =>
-    request<void>(`/api/products/${productId}`, { method: 'DELETE' }),
+  deleteProduct: (shopId: string, productId: string) =>
+    request<void>(`/api/products/${productId}`, { method: 'DELETE', headers: seller(shopId) }),
 
   listStorefronts: () => request<ShopCard[]>('/api/storefronts'),
 
   getStorefront: (slug: string) => request<Storefront>(`/api/storefront/${encodeURIComponent(slug)}`),
 
-  publishShop: (shopId: string) => request<Shop>(`/api/shops/${shopId}/publish`, { method: 'POST' }),
+  publishShop: (shopId: string) => request<Shop>(`/api/shops/${shopId}/publish`, { method: 'POST', headers: seller(shopId) }),
 
   /** after = last event id already shown; only newer events come back. */
   getDashboard: (shopId: string, after = 0) =>
-    request<Dashboard>(`/api/shops/${encodeURIComponent(shopId)}/dashboard?after=${after}`),
+    request<Dashboard>(`/api/shops/${encodeURIComponent(shopId)}/dashboard?after=${after}`, {
+      headers: seller(shopId),
+    }),
 
   health: () => request<{ ok: boolean; ai_provider: 'mock' | 'anthropic' }>('/api/health'),
 
