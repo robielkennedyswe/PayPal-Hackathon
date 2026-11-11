@@ -7,7 +7,8 @@ import { useEffect, useState } from 'react'
 const NAV_EVENT = 'app:navigate'
 
 // A page with unsaved edits can ask before in-app navigation (Link clicks,
-// navigate()). Closing or reloading the tab is covered by beforeunload.
+// navigate(), and the browser's Back/Forward buttons). Closing or reloading
+// the tab is covered by beforeunload.
 let leaveGuard: (() => boolean) | null = null
 export function setLeaveGuard(guard: (() => boolean) | null) {
   leaveGuard = guard
@@ -20,6 +21,27 @@ export function navigate(to: string, { replace = false } = {}) {
   window.dispatchEvent(new Event(NAV_EVENT))
   window.scrollTo(0, 0)
 }
+
+// Back/Forward has already changed the URL by the time popstate fires, so
+// if the guard says stay, put the page we were on back in the address bar.
+// pushState (not history.go) keeps this simple; the cost is one extra
+// history entry after a cancelled Back.
+let shownPath = window.location.pathname + window.location.search
+window.addEventListener(
+  'popstate',
+  (e) => {
+    if (leaveGuard && !leaveGuard()) {
+      e.stopImmediatePropagation()
+      window.history.pushState(null, '', shownPath)
+      return
+    }
+    shownPath = window.location.pathname + window.location.search
+  },
+  { capture: true },
+)
+window.addEventListener(NAV_EVENT, () => {
+  shownPath = window.location.pathname + window.location.search
+})
 
 /** Current location; re-renders on navigate() and on back/forward. */
 export function useLocation() {
