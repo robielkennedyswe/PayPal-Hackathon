@@ -9,6 +9,7 @@ export type Product = {
   tags: string[]
   price: string // USD decimal string, "34.00"
   stock: number
+  live: boolean // false = added to a live shop, not visible to agents until saved
   image_url: string | null
   created_at: string
 }

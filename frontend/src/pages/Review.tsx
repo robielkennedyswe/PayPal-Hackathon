@@ -1,7 +1,8 @@
 // Screen 2: edit each AI draft, see the agent-facing JSON live, publish.
 // Before publishing, fields save on blur (drafts) and Publish saves anything
 // still pending. Once published, edits go live only when the seller clicks
-// Save changes, so agents never see half-finished edits.
+// Save changes, so agents never see half-finished edits. Photos added to a
+// live shop arrive as drafts that aren't live yet; Save changes puts them live.
 
 import { useEffect, useMemo, useState } from 'react'
 import { agentView } from '../agentView'
@@ -100,9 +101,13 @@ export function Review({ shopId }: { shopId: string }) {
   )
   const published = shop?.published ?? false
   const unsaved = published && dirty.size > 0
+  // Live shop only: new drafts not visible to agents until Save changes.
+  const notLive = published ? products.filter((p) => !p.live) : []
+  const pending = new Set([...dirty, ...notLive.map((p) => p.id)])
 
   // Published shop with unsaved edits: ask before leaving (tab close/reload,
-  // and in-app links via the router guard).
+  // in-app links and Back/Forward via the router guard). Not-yet-live drafts
+  // don't count: they're saved on the server and wait here for the seller.
   useEffect(() => {
     if (!unsaved) return
     const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault()
@@ -161,8 +166,14 @@ export function Review({ shopId }: { shopId: string }) {
     setSavedNotice(false)
     const results = await Promise.all(products.map((p) => save(p.id)))
     if (results.every(Boolean) && shop?.published) {
-      // Already live: edits go live as they save, so just confirm it.
-      setSavedNotice(true)
+      // Already live: edits went live as they saved; publishing again puts
+      // any new drafts live too.
+      try {
+        if (notLive.length > 0) setProducts((await api.publishShop(shopId)).products)
+        setSavedNotice(true)
+      } catch (e) {
+        setPublishError((e as Error).message)
+      }
     } else if (results.every(Boolean)) {
       try {
         await api.publishShop(shopId)
@@ -233,13 +244,13 @@ export function Review({ shopId }: { shopId: string }) {
               // mid-click swallows the click. publish() saves pending edits itself.
               // Once published it becomes "Save changes": enabled only when an
               // edit is pending, since that's the only way edits go live.
-              disabled={publishing || anyInvalid || products.length === 0 || (shop.published && dirty.size === 0)}
+              disabled={publishing || anyInvalid || products.length === 0 || (shop.published && pending.size === 0)}
             >
               {shop.published
                 ? publishing
                   ? 'Saving…'
-                  : dirty.size > 0
-                    ? `Save changes (${dirty.size})`
+                  : pending.size > 0
+                    ? `Save changes (${pending.size})`
                     : 'All changes saved ✓'
                 : publishing
                   ? 'Publishing…'
@@ -252,7 +263,11 @@ export function Review({ shopId }: { shopId: string }) {
           <div className="banner banner-success" role="status">
             <div>
               <strong>{shop.name} is live to AI agents.</strong>
-              <div>Edits go live when you click Save changes.</div>
+              <div>
+                {notLive.length > 0
+                  ? `${notLive.length === 1 ? '1 new product isn’t' : `${notLive.length} new products aren’t`} live yet. Review, then click Save changes.`
+                  : 'Edits go live when you click Save changes.'}
+              </div>
             </div>
             <Link href={`/sell/${shopId}/dashboard`} className="btn btn-primary btn-sm">
               Open your dashboard →
@@ -293,6 +308,7 @@ export function Review({ shopId }: { shopId: string }) {
                   errors={errors[p.id] ?? {}}
                   saveState={saveState[p.id] ?? 'idle'}
                   unsaved={shop.published && dirty.has(p.id)}
+                  notLive={shop.published && !p.live}
                   saveError={saveError[p.id]}
                   selected={p.id === selected}
                   onSelect={() => setSelected(p.id)}
@@ -353,6 +369,7 @@ type EditorProps = {
   errors: Partial<Record<Field, string>>
   saveState: SaveState
   unsaved: boolean
+  notLive: boolean
   saveError?: string
   selected: boolean
   onSelect: () => void
@@ -361,7 +378,7 @@ type EditorProps = {
   onRemove: () => void
 }
 
-function ProductEditor({ product: p, form, errors, saveState, unsaved, saveError, selected, onSelect, onChange, onBlur, onRemove }: EditorProps) {
+function ProductEditor({ product: p, form, errors, saveState, unsaved, notLive, saveError, selected, onSelect, onChange, onBlur, onRemove }: EditorProps) {
   const id = (f: Field) => `${p.id}-${f}`
   const input = (f: Field, label: string, extra?: { prefix?: string; inputMode?: 'decimal' | 'numeric'; hint?: string }) => (
     <div className="field">
@@ -394,7 +411,7 @@ function ProductEditor({ product: p, form, errors, saveState, unsaved, saveError
       <div className="editor-img">{p.image_url && <img src={p.image_url} alt="" />}</div>
       <div className="editor-fields">
         <div className="editor-top">
-          <span className="chip seller">AI draft</span>
+          {notLive ? <span className="chip new">New · not live yet</span> : <span className="chip seller">AI draft</span>}
           <span className={`save-state ${unsaved && saveState !== 'saving' && saveState !== 'error' ? 'unsaved' : saveState}`} aria-live="polite">
             {saveState === 'saving'
               ? 'Saving…'

@@ -223,7 +223,7 @@ export function Dashboard({ shopId }: { shopId: string }) {
                 </thead>
                 <tbody>
                   {shop.products.map((p) => {
-                    const status = !shop.published ? 'draft' : p.stock <= 0 ? 'out' : p.stock <= 2 ? 'low' : 'live'
+                    const status = !shop.published || !p.live ? 'draft' : p.stock <= 0 ? 'out' : p.stock <= 2 ? 'low' : 'live'
                     return (
                       <tr key={p.id}>
                         <td>

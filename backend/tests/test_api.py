@@ -337,3 +337,51 @@ def test_storefront_directory_lists_published_shops_only(client):
     assert (card["price_min"], card["price_max"]) == ("28.00", "100.00")  # numeric, not string order
     assert len(card["images"]) == 2 and all(i.startswith("/uploads/") for i in card["images"])
     assert "paypal_payee_email" not in card and "id" not in card
+
+
+def test_photo_added_to_live_shop_stays_hidden_until_saved(client, monkeypatch):
+    """Adding a photo to a published shop must not put the AI's draft (and its
+    suggested price) in front of agents before the seller reviews it."""
+    from app import tools
+    from app.checkout import CheckoutError
+
+    mug, shop_id = published_product(client)
+    slug = client.get(f"/api/shops/{shop_id}").json()["slug"]
+    vase = upload(client, shop_id, "white_vase.jpg").json()
+    assert vase["live"] is False
+
+    # Seller sees it; nobody else does.
+    assert [p["live"] for p in client.get(f"/api/shops/{shop_id}").json()["products"]] == [True, False]
+    assert [p["id"] for p in client.get(f"/api/storefront/{slug}").json()["products"]] == [mug]
+    assert client.get("/api/storefronts").json()[0]["product_count"] == 1
+    with Session(engine) as s:
+        assert [r["id"] for r in tools.search_products(s, "")] == [mug]
+        for fn in (tools.get_product, tools.create_checkout):
+            try:
+                fn(s, vase["id"])
+                raise AssertionError(f"{fn.__name__} saw a draft")
+            except CheckoutError as e:
+                assert e.code == "PRODUCT_NOT_FOUND"
+
+    # Save changes on the live shop (= publish again) puts it live.
+    client.post(f"/api/shops/{shop_id}/publish")
+    assert len(client.get(f"/api/storefront/{slug}").json()["products"]) == 2
+    with Session(engine) as s:
+        assert tools.get_product(s, vase["id"])["id"] == vase["id"]
+
+
+def test_migration_keeps_existing_products_live(client):
+    """Products created before the `live` column existed were already public."""
+    from sqlalchemy import text
+    from app.db import _add_missing_columns
+
+    with engine.begin() as conn:
+        conn.exec_driver_sql("DROP TABLE products")
+        conn.exec_driver_sql(
+            "CREATE TABLE products (id VARCHAR PRIMARY KEY, shop_id VARCHAR, title VARCHAR, description VARCHAR,"
+            " attributes JSON, tags JSON, price VARCHAR, stock INTEGER, image_path VARCHAR, created_at DATETIME)"
+        )
+        conn.exec_driver_sql("INSERT INTO products (id, shop_id, title) VALUES ('prod_old', 'shop_x', 'Old mug')")
+    _add_missing_columns()
+    with engine.begin() as conn:
+        assert conn.execute(text("SELECT live FROM products WHERE id = 'prod_old'")).scalar() == 1

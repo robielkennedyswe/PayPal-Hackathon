@@ -41,7 +41,7 @@ class Shop(SQLModel, table=True):
     slug: str = Field(unique=True, index=True)  # storefront URL: /s/<slug>
     name: str
     paypal_payee_email: str  # seller's sandbox business account; receives payment
-    published: bool = False  # only published shops are visible to agents
+    published: bool = False  # only published shops (and their live products) are visible to agents
     # SHA-256 of the seller token (seller_auth.py). None = nobody can manage
     # the shop until a token is issued.
     seller_token_hash: str | None = None
@@ -61,6 +61,10 @@ class Product(SQLModel, table=True):
     price: str  # USD decimal string, e.g. "34.00"; matches PayPal's amount format
     stock: int = 0
     image_path: str | None = None  # where the uploaded photo is stored on disk
+    # Visible to agents/storefront only when the shop is published AND this is
+    # True. Publishing (or Save changes on a live shop) sets it, so a photo
+    # added to a live shop stays hidden until the seller reviews its draft.
+    live: bool = False
     created_at: datetime = Field(default_factory=_now)
 
 

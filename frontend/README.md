@@ -24,7 +24,7 @@ The backend must be running on `:8000` (see [backend/README.md](../backend/READM
 | `/shops` | `Shops` | Directory of published shops |
 | `/s/:slug` | `Storefront` | Public page for a published shop: live prices, stock, sold-out badges |
 | `/sell`, `/sell/:shopId` | `AddProducts` (screen 1) | Shop name + PayPal email, photo drop zone (on phones, tapping it offers the camera, photo library or files), AI draft cards. The first upload creates the shop and stores its seller token; the URL gains the shop id so a refresh resumes it. |
-| `/sell/:shopId/review` | `Review` (screen 2) | Edit each listing, live "What AI agents will see" JSON. Drafts save when you leave a field; once published, edits go live only on **Save changes** (and leaving with unsaved edits asks first). |
+| `/sell/:shopId/review` | `Review` (screen 2) | Edit each listing, live "What AI agents will see" JSON. Drafts save when you leave a field; once published, edits and newly added photos go live only on **Save changes** (and leaving with unsaved edits, including the Back button, asks first). |
 | `/sell/:shopId/dashboard` | `Dashboard` (screen 3) | MCP endpoint, stats, live activity feed (polled), inventory, "connect any AI agent" steps, Copy seller link |
 | `/agent` | `ShopperAgent` (screen 4) | Chat with the built-in agent: tool-call chips, product/approval/confirmation cards, trace panel, Recents |
 | `/checkout/result` | `CheckoutResult` | Where buyers land after PayPal (`?status=…&order=…`) |

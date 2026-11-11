@@ -10,7 +10,8 @@ failures (bad id, out of stock…) raise checkout.CheckoutError with a stable
 `code` and a message safe to show an agent; callers translate that into their
 own error format.
 
-Only products in *published* shops are ever visible here.
+Only *live* products in *published* shops are ever visible here (a photo
+added to a live shop stays hidden until the seller clicks Save changes).
 """
 
 from __future__ import annotations
@@ -41,7 +42,9 @@ def search_products(session: Session, query: str = "", max_price: float | None =
     words = _words(query)
 
     rows = session.exec(
-        select(Product, Shop).join(Shop, Shop.id == Product.shop_id).where(Shop.published == True)  # noqa: E712
+        select(Product, Shop)
+        .join(Shop, Shop.id == Product.shop_id)
+        .where(Shop.published == True, Product.live == True)  # noqa: E712
     ).all()
 
     scored = []
@@ -132,7 +135,7 @@ def get_product(session: Session, product_id: str) -> dict:
     sellers exactly what agents receive."""
     product = session.get(Product, product_id)
     shop = session.get(Shop, product.shop_id) if product else None
-    if product is None or shop is None or not shop.published:
+    if product is None or shop is None or not (shop.published and product.live):
         raise CheckoutError("PRODUCT_NOT_FOUND", f"No product with id {product_id!r}")
     listing = {
         "id": product.id,

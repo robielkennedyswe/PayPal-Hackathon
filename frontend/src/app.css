@@ -362,6 +362,11 @@ textarea.input {
   color: var(--agent);
 }
 
+.chip.new {
+  background: #fdf3e2;
+  color: var(--warning);
+}
+
 /* ---------- screen 1: add products ---------- */
 
 .add-grid {

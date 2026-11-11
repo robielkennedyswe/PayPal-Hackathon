@@ -50,8 +50,12 @@ def init_db() -> None:
 
 def _add_missing_columns() -> None:
     """create_all() never alters existing tables, so columns added after the
-    hosted database was created are added here (nullable, so old rows stay valid)."""
-    added = {"shops": {"seller_token_hash": "VARCHAR"}}
+    hosted database was created are added here, with values that keep old rows
+    valid (products that existed before `live` was added were already public)."""
+    added = {
+        "shops": {"seller_token_hash": "VARCHAR"},
+        "products": {"live": "BOOLEAN NOT NULL DEFAULT 1"},
+    }
     with engine.begin() as conn:
         for table, columns in added.items():
             existing = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}

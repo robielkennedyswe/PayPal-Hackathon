@@ -101,6 +101,7 @@ class ProductOut(BaseModel):
     tags: list[str]
     price: str
     stock: int
+    live: bool  # False = new draft in a live shop, not visible until saved
     image_url: str | None
     created_at: datetime
 

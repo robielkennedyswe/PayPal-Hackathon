@@ -170,10 +170,11 @@ def _seller_product(request: Request, session: Session, product_id: str) -> Prod
     return product
 
 
-def _products(session: Session, shop_id: str) -> list[Product]:
-    return list(
-        session.exec(select(Product).where(Product.shop_id == shop_id).order_by(Product.created_at))
-    )
+def _products(session: Session, shop_id: str, live_only: bool = False) -> list[Product]:
+    query = select(Product).where(Product.shop_id == shop_id)
+    if live_only:  # public views: drafts added to a live shop stay hidden
+        query = query.where(Product.live == True)  # noqa: E712
+    return list(session.exec(query.order_by(Product.created_at)))
 
 
 def _unique_slug(session: Session, name: str) -> str:
@@ -307,11 +308,17 @@ def delete_product(product_id: str, request: Request, session: Session = Depends
 
 @app.post("/api/shops/{shop_id}/publish")
 def publish_shop(shop_id: str, request: Request, session: Session = Depends(get_session)) -> ShopOut:
+    """Puts the shop and every product in it live. Also used by Save changes
+    on a live shop, to put newly added drafts live."""
     shop = _seller_shop(request, session, shop_id)
-    if not _products(session, shop_id):
+    products = _products(session, shop_id)
+    if not products:
         raise HTTPException(400, "Add at least one product before publishing")
     shop.published = True
     session.add(shop)
+    for p in products:
+        p.live = True
+        session.add(p)
     session.commit()
     session.refresh(shop)
     # Re-query after commit: commit expires loaded objects, and pydantic's
@@ -372,7 +379,7 @@ def list_storefronts(session: Session = Depends(get_session)) -> list[ShopCard]:
     shops = session.exec(select(Shop).where(Shop.published == True).order_by(Shop.created_at.desc())).all()  # noqa: E712
     cards = []
     for shop in shops:
-        products = _products(session, shop.id)
+        products = _products(session, shop.id, live_only=True)
         if not products:
             continue
         prices = sorted(Decimal(p.price) for p in products)  # Decimal: "100.00" sorts after "20.00"
@@ -394,7 +401,7 @@ def storefront(slug: str, session: Session = Depends(get_session)) -> Storefront
     shop = session.exec(select(Shop).where(Shop.slug == slug)).first()
     if shop is None or not shop.published:
         raise HTTPException(404, "Shop not found")
-    return StorefrontOut.of(shop, _products(session, shop.id))
+    return StorefrontOut.of(shop, _products(session, shop.id, live_only=True))
 
 
 # Map CheckoutError codes to HTTP status. The body keeps the stable code so

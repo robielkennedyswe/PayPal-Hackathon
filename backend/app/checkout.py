@@ -52,8 +52,8 @@ def create_checkout(session: Session, product_id: str, qty: int = 1) -> dict:
 
     product = session.get(Product, product_id)
     shop = session.get(Shop, product.shop_id) if product else None
-    # Products in unpublished shops look missing, same as the storefront.
-    if product is None or shop is None or not shop.published:
+    # Unpublished shops and not-yet-live drafts look missing, same as the storefront.
+    if product is None or shop is None or not (shop.published and product.live):
         raise CheckoutError("PRODUCT_NOT_FOUND", f"No product with id {product_id!r}")
     if product.stock < qty:
         raise CheckoutError(
