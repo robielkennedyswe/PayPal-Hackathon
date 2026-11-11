@@ -41,6 +41,18 @@ export function rememberShop(id: string, name: string, token?: string) {
   window.dispatchEvent(new Event(EVENT))
 }
 
+/** Drop a shop whose token the server rejected (wrong or replaced seller
+ * link), so the nav stops offering a dashboard this browser can't open. */
+export function forgetShop(id: string) {
+  memoryTokens.delete(id)
+  try {
+    localStorage.setItem(KEY, JSON.stringify(getMyShops().filter((s) => s.id !== id)))
+  } catch {
+    return
+  }
+  window.dispatchEvent(new Event(EVENT))
+}
+
 export function getSellerToken(shopId: string): string | undefined {
   return getMyShops().find((s) => s.id === shopId)?.token ?? memoryTokens.get(shopId)
 }

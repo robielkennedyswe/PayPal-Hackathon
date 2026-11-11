@@ -13,11 +13,12 @@ export function TopBar() {
   // Only shops this browser can manage (has a seller token for) count as "yours".
   const myShops = useMyShops().filter((s) => s.token)
 
-  // "Your shop": the one in the URL if we're on a seller page, else the most recent.
+  // "Your shop": the one in the URL if we're on a seller page, else the most
+  // recent. A URL shop this browser can't manage (no or rejected token) doesn't count.
   const urlShop = (matchPath('/sell/:shopId', pathname) ??
     matchPath('/sell/:shopId/review', pathname) ??
     matchPath('/sell/:shopId/dashboard', pathname))?.shopId
-  const shopId = urlShop ?? myShops[0]?.id
+  const shopId = (urlShop && myShops.some((s) => s.id === urlShop) ? urlShop : undefined) ?? myShops[0]?.id
 
   const onSetup = pathname === '/sell' || (pathname.startsWith('/sell/') && !pathname.endsWith('/dashboard'))
   // Shoppers see "Start selling"; sellers (a shop in this browser) get setup + dashboard.

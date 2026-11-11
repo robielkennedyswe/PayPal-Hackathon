@@ -1,7 +1,7 @@
 // Typed wrappers around the FastAPI routes. In dev, relative URLs go
 // through the Vite proxy to :8000. (Deploy: prefix with the backend URL.)
 
-import { getSellerToken } from './myShops'
+import { forgetShop, getSellerToken } from './myShops'
 import type { AgentHistory, AgentReply, Dashboard, Product, ProductUpdate, Shop, ShopCard, Storefront } from './types'
 
 export class ApiError extends Error {
@@ -43,35 +43,44 @@ const seller = (shopId: string): Record<string, string> => {
   return token ? { 'X-Seller-Token': token } : {}
 }
 
+/** A seller request. If the server rejects this browser's token (403), it's
+ * wrong or was replaced: forget it so the nav stops linking to the shop. */
+async function sellerRequest<T>(shopId: string, path: string, init: RequestInit = {}): Promise<T> {
+  try {
+    return await request<T>(path, { ...init, headers: { ...(init.headers as Record<string, string>), ...seller(shopId) } })
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 403) forgetShop(shopId)
+    throw e
+  }
+}
+
 export const api = {
   createShop: (name: string, paypal_payee_email: string) =>
     request<Shop & { seller_token: string }>('/api/shops', json('POST', { name, paypal_payee_email })),
 
-  getShop: (shopId: string) => request<Shop>(`/api/shops/${shopId}`, { headers: seller(shopId) }),
+  getShop: (shopId: string) => sellerRequest<Shop>(shopId, `/api/shops/${shopId}`),
 
   uploadPhoto: (shopId: string, file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return request<Product>(`/api/shops/${shopId}/products`, { method: 'POST', body: form, headers: seller(shopId) })
+    return sellerRequest<Product>(shopId, `/api/shops/${shopId}/products`, { method: 'POST', body: form })
   },
 
   updateProduct: (shopId: string, productId: string, changes: ProductUpdate) =>
-    request<Product>(`/api/products/${productId}`, json('PATCH', changes, seller(shopId))),
+    sellerRequest<Product>(shopId, `/api/products/${productId}`, json('PATCH', changes)),
 
   deleteProduct: (shopId: string, productId: string) =>
-    request<void>(`/api/products/${productId}`, { method: 'DELETE', headers: seller(shopId) }),
+    sellerRequest<void>(shopId, `/api/products/${productId}`, { method: 'DELETE' }),
 
   listStorefronts: () => request<ShopCard[]>('/api/storefronts'),
 
   getStorefront: (slug: string) => request<Storefront>(`/api/storefront/${encodeURIComponent(slug)}`),
 
-  publishShop: (shopId: string) => request<Shop>(`/api/shops/${shopId}/publish`, { method: 'POST', headers: seller(shopId) }),
+  publishShop: (shopId: string) => sellerRequest<Shop>(shopId, `/api/shops/${shopId}/publish`, { method: 'POST' }),
 
   /** after = last event id already shown; only newer events come back. */
   getDashboard: (shopId: string, after = 0) =>
-    request<Dashboard>(`/api/shops/${encodeURIComponent(shopId)}/dashboard?after=${after}`, {
-      headers: seller(shopId),
-    }),
+    sellerRequest<Dashboard>(shopId, `/api/shops/${encodeURIComponent(shopId)}/dashboard?after=${after}`),
 
   health: () => request<{ ok: boolean; ai_provider: 'mock' | 'anthropic' }>('/api/health'),
 
