@@ -2035,13 +2035,11 @@ textarea.input {
   }
 }
 
-/* Narrow screens: everything stacks; Recents becomes a short scrollable list. */
+/* Narrow screens: everything stacks, chat first (Recents is under it, as a
+   short list) so phones can start typing without scrolling. */
 @media (max-width: 760px) {
   .agent-layout {
     grid-template-columns: 1fr;
-  }
-  .recents {
-    max-height: 240px;
   }
 }
 
@@ -2181,4 +2179,20 @@ textarea.input {
   padding: var(--space-2) var(--space-2) 0;
   border-top: 1px solid var(--border);
   margin-top: var(--space-2);
+}
+
+/* After the .recents base rule so these win. */
+@media (max-width: 760px) {
+  .agent-layout .chat {
+    order: -1;
+  }
+  .recents {
+    position: static;
+    height: auto;
+    min-height: 0;
+    max-height: 260px;
+  }
+  .recents-empty {
+    margin-bottom: var(--space-2);
+  }
 }
