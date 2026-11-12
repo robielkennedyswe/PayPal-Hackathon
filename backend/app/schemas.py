@@ -15,7 +15,18 @@ from pydantic import BaseModel, Field, field_validator
 from app.models import Event, Order, OrderStatus, Product, Shop
 
 PRICE_PATTERN = r"^\d{1,6}\.\d{2}$"  # "34.00": same format catalog_ai and PayPal use
-EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"  # loose check; PayPal is the real judge
+# A plain address PayPal accepts as payee. The old loose check let through
+# "mailto:sb-…@business.example.com" (pasted from an email link); PayPal then
+# rejected every checkout for that shop with 400 INVALID_REQUEST.
+EMAIL_PATTERN = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$"
+
+
+def normalize_email(value: object) -> object:
+    """Trim and drop a pasted "mailto:" prefix before validating."""
+    if not isinstance(value, str):
+        return value
+    v = value.strip()
+    return v[len("mailto:"):].strip() if v.lower().startswith("mailto:") else v
 
 
 def normalize_price(value: object) -> object:
@@ -44,6 +55,8 @@ def _utc(dt: datetime) -> datetime:
 class ShopCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     paypal_payee_email: str = Field(pattern=EMAIL_PATTERN, max_length=254)
+
+    _clean_email = field_validator("paypal_payee_email", mode="before")(staticmethod(normalize_email))
 
     @field_validator("name")
     @classmethod

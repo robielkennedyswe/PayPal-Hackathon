@@ -33,7 +33,11 @@ export type Storefront = {
 
 export type ProductUpdate = Partial<Pick<Product, 'title' | 'description' | 'price' | 'stock' | 'tags'>>
 
-export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+// Same rule as backend EMAIL_PATTERN: a plain address PayPal accepts as payee.
+export const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
+
+/** Trim and drop a pasted "mailto:" prefix (same as the backend). */
+export const normalizeEmail = (s: string) => s.trim().replace(/^mailto:/i, '').trim()
 
 /**
  * "20" -> "20.00", "20.5" -> "20.50", "$1,200" -> "1200.00".

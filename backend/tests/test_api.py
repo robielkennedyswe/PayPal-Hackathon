@@ -404,3 +404,19 @@ def test_paypal_order_body_carries_brand_name(monkeypatch):
     sent.clear()
     REAL_CREATE_ORDER("10.00")
     assert "brand_name" not in sent["payment_source"]["paypal"]["experience_context"]
+
+
+def test_payee_email_must_be_a_plain_address_paypal_accepts(client):
+    """A pasted "mailto:" link once got saved and made every checkout for that
+    shop fail at PayPal (400 INVALID_REQUEST). It's now stripped; other
+    non-address input is rejected up front."""
+    def create(email):
+        return client.post("/api/shops", json={"name": "Mail Test", "paypal_payee_email": email})
+
+    for pasted in [f"mailto:{SELLER}", f"  MAILTO:{SELLER} ", f" {SELLER}\n"]:
+        r = create(pasted)
+        assert r.status_code == 201, pasted
+        client.headers["X-Seller-Token"] = r.json()["seller_token"]
+        assert client.get(f"/api/shops/{r.json()['id']}").json()["paypal_payee_email"] == SELLER
+    for bad in ["seller:x@business.example.com", "a b@example.com", "x@example", "x@@example.com", "x@example.c"]:
+        assert create(bad).status_code == 422, bad

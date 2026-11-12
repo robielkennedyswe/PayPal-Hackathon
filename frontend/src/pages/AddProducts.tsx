@@ -8,7 +8,7 @@ import { SetupSteps } from '../components/SetupSteps'
 import { TopBar } from '../components/TopBar'
 import { rememberShop } from '../myShops'
 import { navigate } from '../router'
-import { EMAIL_RE, type Product, type Shop } from '../types'
+import { EMAIL_RE, normalizeEmail, type Product, type Shop } from '../types'
 
 type Draft = {
   key: string
@@ -74,7 +74,7 @@ export function AddProducts({ shopId }: { shopId?: string }) {
   }, [])
 
   const nameOk = name.trim().length > 0
-  const emailOk = EMAIL_RE.test(email.trim())
+  const emailOk = EMAIL_RE.test(normalizeEmail(email))
   const formReady = shop !== null || (nameOk && emailOk)
 
   const update = (key: string, patch: Partial<Draft>) =>
@@ -84,7 +84,7 @@ export function AddProducts({ shopId }: { shopId?: string }) {
   function ensureShop(): Promise<Shop> {
     if (shopRef.current) return Promise.resolve(shopRef.current)
     creating.current ??= api
-      .createShop(name.trim(), email.trim())
+      .createShop(name.trim(), normalizeEmail(email))
       .then((s) => {
         shopRef.current = s
         setShop(s)
