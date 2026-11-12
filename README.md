@@ -203,7 +203,7 @@ AI runs both sides of the marketplace:
 - **The shopper agent (Claude tool use).** `agent.py` runs Claude over the four tools above, with at most 6 tool rounds per message, low effort (shopping chat doesn't need deep reasoning) and prompt caching.
 - **Agents as customers (MCP).** Any external agent can shop through the MCP server, and every action shows up on the seller's dashboard, credited to "MCP agent" or "Built-in agent".
 - **Cost controls (`ai_budget.py`).** Every Claude call goes through one function that enforces a daily and a total USD budget, a daily call cap and a per-visitor hourly limit, before the call is made.
-- **Models:** `claude-opus-5-5` for the demo and judging, `claude-haiku-5-5` for cheap testing. A `mock` provider (canned listings, a scripted agent that still calls the real tools and the real PayPal sandbox) is for development only.
+- **Models:** the hosted demo (and the demo video) runs `claude-haiku-5-5`: fast and cheap, and good enough for listings and the shopping agent. Set `AI_MODEL=claude-opus-5-5` for the strongest model. A `mock` provider (canned listings, a scripted agent that still calls the real tools and the real PayPal sandbox) is for development only.
 
 ### AI tools used to build it
 
