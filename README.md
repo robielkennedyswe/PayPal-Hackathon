@@ -4,7 +4,7 @@
 
 A small seller uploads product photos. Claude turns each photo into a structured listing, the seller checks price and stock, and publishes. Every published shop gets a storefront and an **MCP endpoint**, so any MCP-compatible AI agent (Claude, ChatGPT, Gemini CLI, Cursor, or your own) can search it and buy from it. Checkout runs on **PayPal Orders v2** with the seller as payee, and **the buyer approves every payment in PayPal. The agent can never pay on its own.**
 
-**Live demo: https://shopmcp.onrender.com** · **Demo video:** <!-- TODO: YouTube link once uploaded --> *(YouTube link coming)* · [MIT license](LICENSE)
+**Live demo: https://shopmcp.onrender.com** · **[Demo video (2:36)](https://www.youtube.com/watch?v=qA0oZTvzZnA)** · [MIT license](LICENSE)
 
 Built for the *Build What's Next with PayPal and AI* hackathon. All payments use the **PayPal sandbox**, so no real money moves.
 
@@ -24,9 +24,10 @@ Crafters, market vendors and other solo sellers who are too small for PayPal's o
 
 You need a **PayPal sandbox Personal account** to approve payments (test money only):
 
-<!-- TODO: sandbox buyer email + password for judges -->
-- Email: *to be added*
-- Password: *to be added*
+- Email: `sb-6floq53354146@personal.example.com`
+- Password: `|#3V^8Ow`
+
+This is a **sandbox-only** test buyer (fake money). Please don't change its password, so other judges can use it too.
 
 Always open PayPal approval links in a **private/incognito window**. If you're logged into the PayPal developer dashboard in the same browser, the sandbox checkout page often fails to load.
 
