@@ -100,6 +100,7 @@ def create_order(
     description: str | None = None,
     payee_email: str | None = None,
     item: dict | None = None,
+    brand_name: str | None = None,
     return_url: str | None = None,
     cancel_url: str | None = None,
 ) -> dict:
@@ -129,21 +130,23 @@ def create_order(
         }]
         unit["amount"]["breakdown"] = {"item_total": {"currency_code": currency, "value": amount}}
 
+    context = {
+        "user_action": "PAY_NOW",
+        "shipping_preference": "NO_SHIPPING",
+        "return_url": return_url or f"{APP_BASE_URL}/paypal/return",
+        "cancel_url": cancel_url or f"{APP_BASE_URL}/paypal/cancel",
+    }
+    if brand_name:
+        # Shown on PayPal's pages ("Cancel and return to <brand>"); without it
+        # PayPal shows the REST app's name. PayPal caps it at 127 chars.
+        context["brand_name"] = brand_name[:127]
+
     body = {
         "intent": "CAPTURE",
         "purchase_units": [unit],
         # experience_context is the current way to set return/cancel URLs.
         # With it, PayPal returns the approval link as rel="payer-action".
-        "payment_source": {
-            "paypal": {
-                "experience_context": {
-                    "user_action": "PAY_NOW",
-                    "shipping_preference": "NO_SHIPPING",
-                    "return_url": return_url or f"{APP_BASE_URL}/paypal/return",
-                    "cancel_url": cancel_url or f"{APP_BASE_URL}/paypal/cancel",
-                }
-            }
-        },
+        "payment_source": {"paypal": {"experience_context": context}},
     }
     return _request("POST", "/v2/checkout/orders", json=body)
 

@@ -5,6 +5,10 @@ from app.db import engine
 from app.models import Order, OrderStatus
 
 SELLER = "seller@business.example.com"
+# The real function, captured before conftest's no_network fixture blocks it
+# (that fixture replaces paypal.create_order for every test).
+REAL_CREATE_ORDER = paypal.create_order
+
 TOKENS: dict[str, str] = {}  # shop id -> seller token, for tests that use several shops
 
 
@@ -239,6 +243,7 @@ def test_checkout_retries_with_neutral_text_when_paypal_firewall_rejects(client,
     assert "<script>" in rejected["rejected"]
     assert retried["description"] == "Order from ShopMCP" and retried["item"]["name"] == f"ShopMCP item {pid}"
     assert retried["amount"] == "39.98" and retried["item"]["quantity"] == 2  # amount unchanged
+    assert retried["brand_name"] == "ShopMCP"  # neutral brand too
 
 
 def test_checkout_does_not_retry_other_paypal_errors(client, monkeypatch):
@@ -269,6 +274,7 @@ def test_checkout_creates_order_with_seller_as_payee(client, monkeypatch):
     (call,) = calls
     assert call["amount"] == "59.97" and call["payee_email"] == SELLER
     assert call["item"] == {"name": body["title"], "quantity": 3, "unit_amount": "19.99"}
+    assert call["brand_name"] == "Clay Corner"  # PayPal's pages name the shop
 
     order = client.get(f"/api/orders/{body['order_id']}").json()
     assert (order["paypal_order_id"], order["qty"], order["amount"]) == ("PAYPAL123", 3, "59.97")
@@ -385,3 +391,16 @@ def test_migration_keeps_existing_products_live(client):
     _add_missing_columns()
     with engine.begin() as conn:
         assert conn.execute(text("SELECT live FROM products WHERE id = 'prod_old'")).scalar() == 1
+
+
+def test_paypal_order_body_carries_brand_name(monkeypatch):
+    """The brand goes in experience_context (shown as "Cancel and return to
+    <brand>" on PayPal's pages) and is capped at PayPal's 127 chars."""
+    sent = {}
+    monkeypatch.setattr(paypal, "_request", lambda method, path, json=None: sent.update(json) or {})
+    REAL_CREATE_ORDER("10.00", brand_name="B" * 200)
+    ctx = sent["payment_source"]["paypal"]["experience_context"]
+    assert ctx["brand_name"] == "B" * 127 and ctx["user_action"] == "PAY_NOW"
+    sent.clear()
+    REAL_CREATE_ORDER("10.00")
+    assert "brand_name" not in sent["payment_source"]["paypal"]["experience_context"]

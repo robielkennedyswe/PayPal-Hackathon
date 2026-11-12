@@ -63,18 +63,19 @@ def create_checkout(session: Session, product_id: str, qty: int = 1) -> dict:
     # Decimal, not float: 3 * 19.99 must be exactly "59.97".
     amount = str((Decimal(product.price) * qty).quantize(Decimal("0.01")))
 
-    def _create(description: str, item_name: str) -> dict:
+    def _create(description: str, item_name: str, brand: str) -> dict:
         return paypal.create_order(
             amount,
             CURRENCY,
             description=description,
             payee_email=shop.paypal_payee_email,
             item={"name": item_name, "quantity": qty, "unit_amount": product.price},
+            brand_name=brand,  # PayPal's pages name the shop, not our sandbox app
         )
 
     try:
         try:
-            pp_order = _create(f"{shop.name}: {product.title}", product.title)
+            pp_order = _create(f"{shop.name}: {product.title}", product.title, shop.name)
         except paypal.PayPalError as e:
             # PayPal's firewall answers 406 when seller-written text looks like
             # code (e.g. "<script>", "javascript:", "onerror="; verified in
@@ -82,7 +83,7 @@ def create_checkout(session: Session, product_id: str, qty: int = 1) -> dict:
             # the buyer still sees the right amount and quantity.
             if e.status != 406:
                 raise
-            pp_order = _create("Order from ShopMCP", f"ShopMCP item {product.id}")
+            pp_order = _create("Order from ShopMCP", f"ShopMCP item {product.id}", "ShopMCP")
     except paypal.PayPalError as e:
         raise CheckoutError("PAYMENT_PROVIDER_ERROR", "PayPal could not create the order") from e
 
