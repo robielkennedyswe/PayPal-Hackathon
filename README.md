@@ -2,13 +2,19 @@
 
 **Make any tiny shop buyable by AI agents.**
 
-A small seller uploads product photos. Claude turns each photo into a structured listing, the seller checks price and stock, and publishes. Every published shop gets a storefront and an **MCP endpoint**, so any MCP-compatible AI agent (Claude, Claude Code, or your own) can search it and buy from it. Checkout runs on **PayPal Orders v2** with the seller as payee, and **the buyer approves every payment in PayPal. The agent can never pay on its own.**
+A small seller uploads product photos. Claude turns each photo into a structured listing, the seller checks price and stock, and publishes. Every published shop gets a storefront and an **MCP endpoint**, so any MCP-compatible AI agent (Claude, ChatGPT, Gemini CLI, Cursor, or your own) can search it and buy from it. Checkout runs on **PayPal Orders v2** with the seller as payee, and **the buyer approves every payment in PayPal. The agent can never pay on its own.**
 
-**Live demo: https://shopmcp.onrender.com** · Demo video: <!-- TODO: YouTube link --> *coming soon* · [MIT license](LICENSE)
+**Live demo: https://shopmcp.onrender.com** · **Demo video:** <!-- TODO: YouTube link once uploaded --> *(YouTube link coming)* · [MIT license](LICENSE)
 
 Built for the *Build What's Next with PayPal and AI* hackathon. All payments use the **PayPal sandbox**, so no real money moves.
 
-<!-- TODO: screenshots (storefront, review page, dashboard feed, agent chat) after the final UI pass -->
+| Photos → AI listings | Review: what agents will see |
+|---|---|
+| ![Claude drafts a listing from each product photo](docs/screenshots/1-ai-drafts.jpg) | ![Review page with the live agent-view JSON](docs/screenshots/2-review-agent-view.jpg) |
+| **Shopper agent: search, confirm, PayPal** | **Seller dashboard: "Sold via AI agent"** |
+| ![The shopper agent with its MCP tool-call trace](docs/screenshots/3-shopper-agent.jpg) | ![Dashboard with the sale, stats and live activity feed](docs/screenshots/4-dashboard-sale.jpg) |
+
+The demo shops on the live site (Henry's Headphones and six small makers) use **AI-generated product photos** (OpenAI image model) so no real brands or trademarks appear; their listings were written by Claude from those photos through the normal seller flow.
 
 ## Who it's for
 
@@ -26,7 +32,7 @@ Always open PayPal approval links in a **private/incognito window**. If you're l
 
 ### 1. Shop with the built-in agent (nothing to install)
 
-1. Open **[shopmcp.onrender.com/agent](https://shopmcp.onrender.com/agent)** and ask, for example: *"Find me a climbing rope under $50."*
+1. Open **[shopmcp.onrender.com/agent](https://shopmcp.onrender.com/agent)** and ask, for example: *"Find me a pair of over-ear headphones to give as a gift, budget around $100."*
 2. The agent searches, shows the product, and asks you to confirm. Say *"yes, buy it"*.
 3. Click **Review & pay in PayPal**, copy the link into a private window, log in with the sandbox buyer, and approve.
 4. Back in the chat, the page notices the approval and the agent confirms the order once the payment is captured. The right-hand panel traces every tool call.
@@ -51,7 +57,7 @@ The MCP endpoint is **`https://shopmcp.onrender.com/mcp`** (streamable HTTP, no 
 ### 3. Be the seller
 
 1. Open **[/sell](https://shopmcp.onrender.com/sell)**, enter a shop name and a PayPal sandbox **business** email, and drop in a few product photos (on a phone, tap the photo area to take a picture with the camera). Each one becomes an AI-drafted listing in a few seconds.
-   <!-- TODO: which payee email judges should use (decide later) -->
+   **Payee email to use:** the demo's sandbox business account **`sb-jptms53373342@business.example.com`**, or any PayPal sandbox *business* email of your own. (PayPal routes the money there; a pasted `mailto:` prefix is removed automatically.)
 2. **Review & publish:** edit title, description, price, stock and tags. The side panel shows the exact JSON an agent will receive. **Publish shop** puts it live on its storefront and to AI agents; after that, edits and newly added photos go live only when you click **Save changes**.
 3. **Dashboard:** your MCP endpoint, sales stats, a live feed of what agents do (search → view → checkout → approved → **Sold via AI agent**), and inventory. Only the seller can open it (see [Security](#security)).
 
@@ -118,7 +124,7 @@ sequenceDiagram
   participant PP as PayPal (sandbox)
   participant Dash as Seller dashboard
 
-  Buyer->>Agent: Find me a climbing rope under $50
+  Buyer->>Agent: Over-ear headphones as a gift, about $100
   Agent->>S: search_products, get_product
   S-->>Agent: Listings with price, stock, photo link
   Agent->>Buyer: Confirm item, quantity and total?
@@ -210,6 +216,7 @@ AI runs both sides of the marketplace:
 - **Claude Code** (Anthropic): the coding assistant throughout: code, tests, debugging, deployment and these docs. The author reviewed and committed every change.
 - **Claude Design:** designed the four main screens.
 - **Claude API:** powers the product itself (above).
+- **OpenAI** (demo assets only, not part of the app): `gpt-image-2` generated the brand-free product photos for the demo shops, and `gpt-4o-mini-tts` voiced the demo video's narration.
 
 ## Security
 
